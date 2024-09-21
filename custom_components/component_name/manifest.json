@@ -6,11 +6,12 @@
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://www.home-assistant.io/integrations/daikin_d3net",
+  "documentation": "https://github.com/martinstafford/daikin_d3net",
   "homekit": {},
   "iot_class": "local_polling",
   "requirements": ["pymodbus==3.6.9"],
   "ssdp": [],
   "zeroconf": [],
-  "version": "1.0.1"
+  "version": "1.0.1",
+  "issus_tracker": "https://github.com/martinstafford/daikin_d3net/issues"
 }
