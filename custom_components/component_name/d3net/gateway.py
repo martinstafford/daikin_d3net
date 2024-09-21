@@ -16,7 +16,7 @@ from .encoding import (
 
 _LOGGER = logging.getLogger(__name__)
 
-THROTTLE_DELAY = 0.05
+THROTTLE_DELAY = 0.025
 
 
 class D3netGateway:
@@ -129,14 +129,14 @@ class D3netGateway:
             await self._throttle_end()
             unit.status = DecodeUnitStatus(unit_status.registers)
 
-    async def async_write(self, address: int, value: int):
+    async def async_write(self, address: int, values: list[int]):
         """Write a register."""
         async with self._lock:
             await self._async_connect()
-            _LOGGER.info("Writing %s to address %s", value, address)
+            _LOGGER.info("Writing %s to address %s", values, address)
             await self._throttle_start()
-            await self._client.write_register(
-                address=address, slave=self._slave, value=value
+            await self._client.write_registers(
+                address=address, slave=self._slave, values=values
             )
             await self._throttle_end()
 

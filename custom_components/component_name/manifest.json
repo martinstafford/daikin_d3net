@@ -12,5 +12,5 @@
   "requirements": ["pymodbus==3.6.9"],
   "ssdp": [],
   "zeroconf": [],
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

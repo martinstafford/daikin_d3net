@@ -31,17 +31,6 @@ from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
 
-"""
-def setup_platform(
-    hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> None:
-    _LOGGER.info("Climate Async Setup")
-    # add_entities([DaikinModbusClimate()])
-"""
-
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -225,10 +214,12 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn on the unit."""
         await self._unit.writer.write(power=True)
+        self.async_write_ha_state()
 
     async def async_turn_off(self) -> None:
         """Turn off the unit."""
         await self._unit.writer.write(power=False)
+        self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the HVAC mode."""
@@ -243,7 +234,9 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs) -> None:
         """Set new target temperature."""
         await self._unit.writer.write(temp_setpoint=kwargs["temperature"])
+        self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new fan mode."""
         await self._unit.writer.write(fan_speed=FANSPEED_HA_DAIKIN[fan_mode])
+        self.async_write_ha_state()

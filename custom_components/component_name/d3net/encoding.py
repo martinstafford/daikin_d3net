@@ -1,6 +1,7 @@
 """Daikin DIII-Net Modbus data structures."""
 
 from enum import Enum
+import asyncio
 import logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -348,10 +349,39 @@ class Writer:
 
     def _encode_sint(self, register: int, start: int, length: int, value: int):
         register = self._encode_uint(register, start, length - 1, abs(value))
-        register = self._encode_bit(register, length - 1, value < 0)
-        return register
+        return self._encode_bit(register, length - 1, value < 0)
 
     async def write(
+        self,
+        power: bool | None = None,
+        fan_speed: D3netFanSpeed = None,
+        fan_direct: D3netFanDirection = None,
+        operating_mode: D3netOperationMode = None,
+        temp_setpoint: float | None = None,
+        filter_reset: bool | None = None,
+    ):
+        """Read status, set holding registers then write updates to unit."""
+        # Read the current status into decoder
+        await self._unit.gateway.async_unit_status(self._unit)
+        # Write the current status to the holding registers
+        await self._write()
+        # Sleep for 0.5 seconds before writing to the holding registers again
+        await asyncio.sleep(0.5)
+        # Write the passed values to the holding registers
+        await self._write(
+            power=power,
+            fan_speed=fan_speed,
+            fan_direct=fan_direct,
+            operating_mode=operating_mode,
+            filter_reset=filter_reset,
+            temp_setpoint=temp_setpoint,
+        )
+        # Sleep to wait for the unit to change status and report back to gateway
+        await asyncio.sleep(3)
+        # Read in the updated status to the decoder
+        await self._unit.gateway.async_unit_status(self._unit)
+
+    async def _write(
         self,
         power: bool | None = None,
         fan_speed: D3netFanSpeed = None,
@@ -360,47 +390,58 @@ class Writer:
         filter_reset: bool | None = None,
         temp_setpoint: float | None = None,
     ):
-        """Set register0 of a unit."""
-        await self._unit.gateway.async_unit_status(self._unit)
+        """Write holding registers to unit. Use supplied values or fall back to current status."""
 
-        # Write the operating mode first so we can set it before turning on.
-        if not (operating_mode is None and filter_reset is None):
-            register = 0
-            register = self._encode_uint(register, 0, 3, operating_mode.value)
-            register = self._encode_uint(register, 4, 4, 15 if filter_reset else 0)
-            await self._unit.gateway.async_write(2001 + self._unit.index * 3, register)
+        # Power and fan details in register 0
+        register0 = 0
+        register0 = self._encode_bit(
+            register0, 0, self._unit.status.power if power is None else power
+        )
+        register0 = self._encode_uint(
+            register0, 4, 4, 6 if self._unit.capabilities.fan_speed_capable else 0
+        )
+        register0 = self._encode_uint(
+            register0,
+            8,
+            3,
+            self._unit.status.fan_direct.value
+            if fan_direct is None
+            else fan_direct.value,
+        )
+        register0 = self._encode_uint(
+            register0,
+            12,
+            3,
+            self._unit.status.fan_speed.value if fan_speed is None else fan_speed.value,
+        )
 
-        # Then set the setpoint temperature
-        if temp_setpoint is not None:
-            register = 0
-            register = self._encode_sint(register, 0, 16, int(temp_setpoint * 10))
-            await self._unit.gateway.async_write(2002 + self._unit.index * 3, register)
+        # Operating mode in register 1
+        register1 = 0
+        register1 = self._encode_uint(
+            register1,
+            0,
+            3,
+            self._unit.status.operating_mode.value
+            if operating_mode is None
+            else operating_mode.value,
+        )
+        register1 = self._encode_uint(register1, 4, 4, 15 if filter_reset else 0)
 
-        # And then the power state and fans.
-        if not (power is None and fan_speed is None and fan_direct is None):
-            register = 0
-            register = self._encode_bit(
-                register, 0, self._unit.status.power if power is None else power
-            )
-            register = self._encode_uint(
-                register, 4, 4, 6 if self._unit.capabilities.fan_speed_capable else 0
-            )
-            register = self._encode_uint(
-                register,
-                8,
-                3,
-                self._unit.status.fan_direct.value
-                if fan_direct is None
-                else fan_direct.value,
-            )
-            register = self._encode_uint(
-                register,
-                12,
-                3,
-                self._unit.status.fan_speed.value
-                if fan_speed is None
-                else fan_speed.value,
-            )
-            await self._unit.gateway.async_write(2000 + self._unit.index * 3, register)
-
-        await self._unit.gateway.async_unit_status(self._unit)
+        # Setpoint temperature in register 2
+        register2 = 0
+        register2 = self._encode_sint(
+            register2,
+            0,
+            16,
+            int(
+                (
+                    self._unit.status.temp_setpoint
+                    if temp_setpoint is None
+                    else temp_setpoint
+                )
+                * 10
+            ),
+        )
+        await self._unit.gateway.async_write(
+            2000 + self._unit.index * 3, [register0, register1, register2]
+        )
