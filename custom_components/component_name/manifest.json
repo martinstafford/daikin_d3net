@@ -1,17 +1,11 @@
 {
   "domain": "daikin_d3net",
   "name": "Daikin DIII-NET Modbus",
-  "codeowners": [
-    "@martinstafford"
-  ],
+  "codeowners": [ "@martinstafford" ],
   "config_flow": true,
-  "dependencies": [],
   "documentation": "https://github.com/martinstafford/daikin_d3net",
-  "homekit": {},
   "iot_class": "local_polling",
   "requirements": ["pymodbus==3.6.9"],
-  "ssdp": [],
-  "zeroconf": [],
   "version": "1.0.1",
   "issue_tracker": "https://github.com/martinstafford/daikin_d3net/issues"
 }
