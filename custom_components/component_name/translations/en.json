@@ -1,0 +1,23 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Device is already configured"
+        },
+        "error": {
+            "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication",
+            "unknown": "Unexpected error"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "host": "Modbus Gateway Address",
+                    "name": "Prefix for Daikin Modbus Entities",
+                    "port": "Modbus Gateway Port",
+                    "slave": "Modbus Slave ID"
+                },
+                "title": "Enter the connection details for your DIII-Net ModBus gateway"
+            }
+        }
+    }
+}
