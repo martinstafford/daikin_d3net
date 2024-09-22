@@ -124,7 +124,8 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         self._coordinator = coordinator
 
         self._attr_device_info: DeviceInfo = coordinator.device_info(unit)
-        self._device_name = self._attr_device_info["name"]
+        self._attr_name = self._attr_device_info["name"] + " Climate"
+        self._attr_unique_id = self._attr_name
 
         self._attr_supported_features = (
             ClimateEntityFeature.TURN_ON
@@ -164,16 +165,6 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
     def min_temp(self) -> float:
         """Minimum Temperature."""
         return self._unit.capabilities.cool_setpoint_lowerlimit
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID."""
-        return self.name
-
-    @property
-    def name(self) -> str:
-        """Return the name."""
-        return f"{self._device_name}"
 
     @property
     def hvac_mode(self) -> HVACMode:
