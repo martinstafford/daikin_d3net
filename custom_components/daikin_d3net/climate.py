@@ -124,7 +124,7 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         self._coordinator = coordinator
 
         self._attr_device_info: DeviceInfo = coordinator.device_info(unit)
-        self._attr_name = self._attr_device_info["name"] + " Climate"
+        self._attr_name = self._attr_device_info["name"]
         self._attr_unique_id = self._attr_name
 
         self._attr_supported_features = (
