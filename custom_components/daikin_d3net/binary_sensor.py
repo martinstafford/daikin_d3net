@@ -53,6 +53,7 @@ class D3netSensorFilter(D3netSensorBase):
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Initialize custom properties for this sensor."""
         super().__init__(coordinator, unit)
+        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
         self._attr_name = self._attr_device_info["name"] + " Filter"
         self._attr_unique_id = self._attr_name
 
