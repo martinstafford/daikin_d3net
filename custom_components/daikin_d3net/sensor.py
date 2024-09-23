@@ -123,4 +123,6 @@ class D3netSensorState(D3netSensorBase):
                 return "mdi:fire"
             case D3netOperationMode.COOL:
                 return "mdi:snowflake"
-        return "mdi:help"
+            case D3netOperationMode.DRY:
+                return "mdi:water-percent"
+        return "mdi:thermostat"

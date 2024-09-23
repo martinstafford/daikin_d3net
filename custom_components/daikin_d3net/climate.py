@@ -157,6 +157,22 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
             ]
 
     @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        if not self._unit.status.power:
+            return "mdi:power-standby"
+        match self._unit.status.operating_current:
+            case D3netOperationMode.FAN:
+                return "mdi:fan"
+            case D3netOperationMode.HEAT:
+                return "mdi:fire"
+            case D3netOperationMode.COOL:
+                return "mdi:snowflake"
+            case D3netOperationMode.DRY:
+                return "mdi:water-percent"
+        return "mdi:thermostat"
+    
+    @property
     def max_temp(self) -> float:
         """Maximum Temperature."""
         return self._unit.capabilities.heat_setpoint_upperlimit
