@@ -20,7 +20,7 @@ from .d3net.gateway import D3netGateway, D3netUnit
 _LOGGER = logging.getLogger(__name__)
 
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.CLIMATE, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -52,8 +52,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not unload_ok:
         return False
 
-    coordinator: D3netCoordinator = entry
-    coordinator.gateway.close()
+    coordinator: D3netCoordinator = entry.runtime_data
+    await coordinator.gateway.async_close()
 
     return True
 
@@ -100,6 +100,5 @@ class D3netCoordinator(DataUpdateCoordinator):
         self._name = name
 
     async def _async_update_data(self):
-        """Update Daikin Modbus data."""
-        for unit in self._gateway.units:
-            await unit.async_update()
+        """Update the status of all units."""
+        await self._gateway.async_unit_status()

@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .__init__ import D3netCoordinator
 from .climate import ACTION_DAIKIN_HA
 from .d3net.gateway import D3netUnit
+from .d3net.encoding import D3netOperationMode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,6 +87,11 @@ class D3netSensorSetpoint(D3netSensorBase):
         """Setpoint temperature in the room."""
         return self._unit.status.temp_setpoint
 
+    @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        return "mdi:thermometer-check"
+
 
 class D3netSensorState(D3netSensorBase):
     """Sensor object for operating state data."""
@@ -104,3 +110,17 @@ class D3netSensorState(D3netSensorBase):
         if self._unit.status.power:
             return ACTION_DAIKIN_HA[self._unit.status.operating_current].name
         return HVACAction.OFF.name
+
+    @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        if not self._unit.status.power:
+            return "mdi:power-standby"
+        match self._unit.status.operating_current:
+            case D3netOperationMode.FAN:
+                return "mdi:fan"
+            case D3netOperationMode.HEAT:
+                return "mdi:fire"
+            case D3netOperationMode.COOL:
+                return "mdi:snowflake"
+        return "mdi:help"

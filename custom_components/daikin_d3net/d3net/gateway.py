@@ -66,6 +66,30 @@ class D3netGateway:
         async with self._lock:
             await self._client.close()
 
+    async def _async_unit_status(self, unit):
+        """Perform the unit update. Lock must already be held."""
+        await self._throttle_start()
+        response = await self._client.read_input_registers(
+            address=DecodeUnitStatus.ADDRESS + unit.index * DecodeUnitStatus.COUNT,
+            count=DecodeUnitStatus.COUNT,
+            slave=self._slave,
+        )
+        await self._throttle_end()
+        unit.status = DecodeUnitStatus(response.registers)
+
+    async def _async_unit_capabilities(self, unit):
+        """Retrieve the unit capabilities."""
+        await self._throttle_start()
+        # _LOGGER.info("Determining capabilities for Unit %s", unit.unit_id)
+        response = await self._client.read_input_registers(
+            address=DecodeUnitCapability.ADDRESS
+            + unit.index * DecodeUnitCapability.COUNT,
+            count=DecodeUnitCapability.COUNT,
+            slave=self._slave,
+        )
+        await self._throttle_end()
+        unit.capabilities = DecodeUnitCapability(response.registers)
+
     async def async_setup(self):
         """Return a bool array of connected units."""
         async with self._lock:
@@ -90,44 +114,21 @@ class D3netGateway:
                     if connected:
                         unit = D3netUnit(self, index)
                         self._units.append(unit)
+                        await self._async_unit_capabilities(unit)
+                        await self._async_unit_status(unit)
 
-                        await self._throttle_start()
-                        # _LOGGER.info("Determining capabilities for Unit %s", unit.unit_id)
-                        unit_capabilities = await self._client.read_input_registers(
-                            address=DecodeUnitCapability.ADDRESS
-                            + index * DecodeUnitCapability.COUNT,
-                            count=DecodeUnitCapability.COUNT,
-                            slave=self._slave,
-                        )
-                        await self._throttle_end()
-                        unit.capabilities = DecodeUnitCapability(
-                            unit_capabilities.registers
-                        )
-
-                        await self._throttle_start()
-                        # _LOGGER.info("Updating status for Unit %s", unit.unit_id)
-                        unit_status = await self._client.read_input_registers(
-                            address=DecodeUnitStatus.ADDRESS
-                            + index * DecodeUnitStatus.COUNT,
-                            count=DecodeUnitStatus.COUNT,
-                            slave=self._slave,
-                        )
-                        await self._throttle_end()
-                        unit.status = DecodeUnitStatus(unit_status.registers)
-
-    async def async_unit_status(self, unit):
-        """Fetch the status of a selected unit."""
+    async def async_unit_status(self, unit=None):
+        """Update the status of the supplied unit, or all units if none supplied."""
         async with self._lock:
             await self._async_connect()
-            await self._throttle_start()
-            # _LOGGER.info("Updating status for Unit %s", unit.unit_id)
-            unit_status = await self._client.read_input_registers(
-                address=DecodeUnitStatus.ADDRESS + unit.index * DecodeUnitStatus.COUNT,
-                count=DecodeUnitStatus.COUNT,
-                slave=self._slave,
-            )
-            await self._throttle_end()
-            unit.status = DecodeUnitStatus(unit_status.registers)
+            for item in [unit] if unit else self._units:
+                await self._async_unit_status(item)
+
+    # async def async_unit_status(self, unit):
+    #    """Fetch the status of a selected unit."""
+    #    async with self._lock:
+    #        await self._async_connect()
+    #        await self._async_unit_status(unit)
 
     async def async_write(self, address: int, values: list[int]):
         """Write a register."""
@@ -206,7 +207,3 @@ class D3netUnit:
     def writer(self, writer: Writer):
         """Set the Writer object for the unit."""
         self._writer = writer
-
-    async def async_update(self):
-        """Update Unit data from Gateway."""
-        await self._gateway.async_unit_status(self)
