@@ -13,7 +13,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
-from .climate import ACTION_DAIKIN_HA
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.climate import HVACAction
+from homeassistant.components.climate import HVACMode
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -15,9 +15,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
-from .climate import ACTION_DAIKIN_HA
+from .const import MODE_DAIKIN_HA, MODE_HA_TEXT, OPERATION_MODE_ICONS
 from .d3net.gateway import D3netUnit
-from .d3net.encoding import D3netOperationMode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,29 +99,22 @@ class D3netSensorState(D3netSensorBase):
         """Initialize custom properties for this sensor."""
         super().__init__(coordinator, unit)
         self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_options = [name for name in dir(HVACAction) if name.isupper()]
+        self._attr_options = [MODE_HA_TEXT[name] for name in MODE_HA_TEXT]
         self._attr_name = self._attr_device_info["name"] + " State"
         self._attr_unique_id = self._attr_name
 
     @property
-    def native_value(self) -> float:
+    def native_value(self) -> str:
         """Current temperature in the room."""
-        if self._unit.status.power:
-            return ACTION_DAIKIN_HA[self._unit.status.operating_current].name
-        return HVACAction.OFF.name
+        return MODE_HA_TEXT[
+            MODE_DAIKIN_HA[self._unit.status.operating_mode]
+            if self._unit.status.power
+            else HVACMode.OFF
+        ]
 
     @property
     def icon(self) -> str:
         """Icon for setpoint."""
         if not self._unit.status.power:
             return "mdi:power-standby"
-        match self._unit.status.operating_current:
-            case D3netOperationMode.FAN:
-                return "mdi:fan"
-            case D3netOperationMode.HEAT:
-                return "mdi:fire"
-            case D3netOperationMode.COOL:
-                return "mdi:snowflake"
-            case D3netOperationMode.DRY:
-                return "mdi:water-percent"
-        return "mdi:thermostat"
+        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]

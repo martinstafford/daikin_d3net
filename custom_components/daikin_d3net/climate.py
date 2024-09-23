@@ -26,6 +26,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
+from .const import OPERATION_MODE_ICONS
 from .d3net.encoding import D3netFanSpeed, D3netFanSpeedCapability, D3netOperationMode
 from .d3net.gateway import D3netUnit
 
@@ -54,6 +55,14 @@ MODE_HA_DAIKIN = {
     HVACMode.DRY: D3netOperationMode.DRY,
     HVACMode.FAN_ONLY: D3netOperationMode.FAN,
     HVACMode.HEAT: D3netOperationMode.HEAT,
+}
+MODE_HA_TEXT = {
+    HVACMode.AUTO: "Auto",
+    HVACMode.COOL: "Cool",
+    HVACMode.DRY: "Dry",
+    HVACMode.FAN_ONLY: "Fan",
+    HVACMode.HEAT: "Heat",
+    HVACMode.OFF: "Off",
 }
 
 ACTION_DAIKIN_HA = {
@@ -161,17 +170,8 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         """Icon for setpoint."""
         if not self._unit.status.power:
             return "mdi:power-standby"
-        match self._unit.status.operating_current:
-            case D3netOperationMode.FAN:
-                return "mdi:fan"
-            case D3netOperationMode.HEAT:
-                return "mdi:fire"
-            case D3netOperationMode.COOL:
-                return "mdi:snowflake"
-            case D3netOperationMode.DRY:
-                return "mdi:water-percent"
-        return "mdi:thermostat"
-    
+        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
+
     @property
     def max_temp(self) -> float:
         """Maximum Temperature."""
