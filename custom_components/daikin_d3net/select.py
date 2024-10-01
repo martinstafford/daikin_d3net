@@ -3,11 +3,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.climate import HVACMode
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    UnitOfTemperature,
-)
+from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -15,7 +11,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
-from .const import MODE_DAIKIN_HA, MODE_HA_TEXT, OPERATION_MODE_ICONS
+from .const import (
+    MODE_DAIKIN_HA,
+    MODE_HA_DAIKIN,
+    MODE_HA_TEXT,
+    MODE_TEXT_HA,
+    OPERATION_MODE_ICONS,
+)
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,11 +30,11 @@ async def async_setup_entry(
     coordinator: D3netCoordinator = entry.runtime_data
     entities = []
     for unit in coordinator.gateway.units:
-        entities.append(D3netSensorTemperature(coordinator, unit))
+        entities.append(D3netSelectMode(coordinator, unit))
     async_add_entities(entities)
 
 
-class D3netSensorBase(CoordinatorEntity, SensorEntity):
+class D3netSensorBase(CoordinatorEntity, SelectEntity):
     """Consolidation of sensor initialization."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
@@ -49,19 +51,28 @@ class D3netSensorBase(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class D3netSensorTemperature(D3netSensorBase):
-    """Sensor object for temperature data."""
+class D3netSelectMode(D3netSensorBase):
+    """Binary Sensor object for filter cleaning alter."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Initialize custom properties for this sensor."""
         super().__init__(coordinator, unit)
-        self._attr_device_class = SensorDeviceClass.TEMPERATURE
-        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        self._attr_name = self._attr_device_info["name"] + " Temperature"
+        self._attr_name = self._attr_device_info["name"] + " Mode"
         self._attr_unique_id = self._attr_name
-        self._attr_suggested_display_precision = 1
+        self._attr_options = [MODE_HA_TEXT[name] for name in MODE_HA_TEXT]
 
     @property
-    def native_value(self) -> float:
-        """Current temperature in the room."""
-        return self._unit.status.temp_current
+    def current_option(self) -> str:
+        """Current Operating Mode."""
+        return MODE_HA_TEXT[MODE_DAIKIN_HA[self._unit.status.operating_mode]]
+
+    @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the selected Mode."""
+        await self._unit.writer.write(
+            operating_mode=MODE_HA_DAIKIN[MODE_TEXT_HA[option]]
+        )

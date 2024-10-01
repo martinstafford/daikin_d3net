@@ -47,7 +47,16 @@ MODE_HA_TEXT = {
     HVACMode.DRY: "Dry",
     HVACMode.FAN_ONLY: "Fan",
     HVACMode.HEAT: "Heat",
-    HVACMode.OFF: "Off",
+    # HVACMode.OFF: "Off",
+}
+
+MODE_TEXT_HA = {
+    "Auto": HVACMode.AUTO,
+    "Cool": HVACMode.COOL,
+    "Dry": HVACMode.DRY,
+    "Fan": HVACMode.FAN_ONLY,
+    "Heat": HVACMode.HEAT,
+    # "Off": HVACMode.OFF,
 }
 
 ACTION_DAIKIN_HA = {

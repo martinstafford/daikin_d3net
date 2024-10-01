@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.climate import HVACMode
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    UnitOfTemperature,
+from homeassistant.components.switch import (
+    SwitchDeviceClass,
+    SwitchEntity,
+    SwitchEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -15,7 +15,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
-from .const import MODE_DAIKIN_HA, MODE_HA_TEXT, OPERATION_MODE_ICONS
+from .const import (
+    MODE_DAIKIN_HA,
+    MODE_HA_DAIKIN,
+    MODE_HA_TEXT,
+    MODE_TEXT_HA,
+    OPERATION_MODE_ICONS,
+)
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,11 +34,11 @@ async def async_setup_entry(
     coordinator: D3netCoordinator = entry.runtime_data
     entities = []
     for unit in coordinator.gateway.units:
-        entities.append(D3netSensorTemperature(coordinator, unit))
+        entities.append(D3netSwitchPower(coordinator, unit))
     async_add_entities(entities)
 
 
-class D3netSensorBase(CoordinatorEntity, SensorEntity):
+class D3netSwitchBase(CoordinatorEntity, SwitchEntity):
     """Consolidation of sensor initialization."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
@@ -49,19 +55,30 @@ class D3netSensorBase(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class D3netSensorTemperature(D3netSensorBase):
-    """Sensor object for temperature data."""
+class D3netSwitchPower(D3netSwitchBase):
+    """Binary Sensor object for filter cleaning alter."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Initialize custom properties for this sensor."""
         super().__init__(coordinator, unit)
-        self._attr_device_class = SensorDeviceClass.TEMPERATURE
-        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        self._attr_name = self._attr_device_info["name"] + " Temperature"
+        self._attr_name = self._attr_device_info["name"] + " Power"
         self._attr_unique_id = self._attr_name
-        self._attr_suggested_display_precision = 1
+        self._attr_device_class = SwitchDeviceClass.SWITCH
 
     @property
-    def native_value(self) -> float:
-        """Current temperature in the room."""
-        return self._unit.status.temp_current
+    def is_on(self) -> bool:
+        """State of the Unit power."""
+        return self._unit.status.power
+
+    @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        return "mdi:power-on" if self._unit.status.power else "mdi:power-standby"
+
+    async def async_turn_on(self, **kwargs):
+        """Turn the entity on."""
+        await self._unit.writer.write(power=True)
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the entity off."""
+        await self._unit.writer.write(power=False)
