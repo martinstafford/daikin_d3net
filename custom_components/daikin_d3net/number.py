@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.number import NumberDeviceClass, NumberEntity
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.components.sensor import UnitOfTemperature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -52,6 +52,7 @@ class D3netNumberSetpoint(D3netNumberBase):
         super().__init__(coordinator, unit)
         self._attr_device_class = NumberDeviceClass.TEMPERATURE
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:thermometer-check"
         self._attr_name = self._attr_device_info["name"] + " Setpoint"
         self._attr_unique_id = self._attr_name
