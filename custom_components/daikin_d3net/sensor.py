@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.climate import HVACMode
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -29,6 +28,7 @@ async def async_setup_entry(
     entities = []
     for unit in coordinator.gateway.units:
         entities.append(D3netSensorTemperature(coordinator, unit))
+        entities.append(D3netSensorState(coordinator, unit))
     async_add_entities(entities)
 
 
@@ -65,3 +65,32 @@ class D3netSensorTemperature(D3netSensorBase):
     def native_value(self) -> float:
         """Current temperature in the room."""
         return self._unit.status.temp_current
+
+
+class D3netSensorState(D3netSensorBase):
+    """Sensor object for operating state data."""
+
+    def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
+        """Initialize custom properties for this sensor."""
+        super().__init__(coordinator, unit)
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = [MODE_HA_TEXT[name] for name in MODE_HA_TEXT]
+        self._attr_options.append("Off")
+        self._attr_name = self._attr_device_info["name"] + " State"
+        self._attr_unique_id = self._attr_name
+
+    @property
+    def native_value(self) -> str:
+        """Current temperature in the room."""
+        return (
+            MODE_HA_TEXT[MODE_DAIKIN_HA[self._unit.status.operating_mode]]
+            if self._unit.status.power
+            else "Off"
+        )
+
+    @property
+    def icon(self) -> str:
+        """Icon for setpoint."""
+        if not self._unit.status.power:
+            return "mdi:power-standby"
+        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]

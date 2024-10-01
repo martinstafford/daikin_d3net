@@ -5,14 +5,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.climate import (
-    FAN_AUTO,
-    FAN_HIGH,
-    FAN_LOW,
-    FAN_MEDIUM,
-    FAN_MIDDLE,
     FAN_OFF,
-    FAN_ON,
-    FAN_TOP,
     ClimateEntity,
     ClimateEntityFeature,
     HVACAction,
@@ -26,8 +19,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
-from .const import OPERATION_MODE_ICONS
-from .d3net.encoding import D3netFanSpeed, D3netFanSpeedCapability, D3netOperationMode
+from .const import (
+    FANSPEED_DAIKIN_HA,
+    FANSPEED_HA_DAIKIN,
+    FANSPEEDCAPABILITY_DAIKIN_HA,
+    OPERATION_MODE_ICONS,
+)
+from .d3net.encoding import D3netOperationMode
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,55 +67,6 @@ ACTION_DAIKIN_HA = {
     D3netOperationMode.HEAT: HVACAction.HEATING,
     D3netOperationMode.COOL: HVACAction.COOLING,
     D3netOperationMode.FAN: HVACAction.FAN,
-}
-
-FANSPEEDCAPABILITY_DAIKIN_HA = {
-    D3netFanSpeedCapability.Fixed: [FAN_ON, FAN_OFF, FAN_HIGH],
-    D3netFanSpeedCapability.Step2: [FAN_ON, FAN_OFF, FAN_AUTO, FAN_LOW, FAN_TOP],
-    D3netFanSpeedCapability.Step3: [
-        FAN_ON,
-        FAN_OFF,
-        FAN_AUTO,
-        FAN_LOW,
-        FAN_MEDIUM,
-        FAN_TOP,
-    ],
-    D3netFanSpeedCapability.Step4: [
-        FAN_ON,
-        FAN_OFF,
-        FAN_AUTO,
-        FAN_LOW,
-        FAN_MEDIUM,
-        FAN_HIGH,
-    ],
-    D3netFanSpeedCapability.Step5: [
-        FAN_ON,
-        FAN_OFF,
-        FAN_AUTO,
-        FAN_LOW,
-        FAN_MIDDLE,
-        FAN_MEDIUM,
-        FAN_HIGH,
-        FAN_TOP,
-    ],
-}
-
-FANSPEED_DAIKIN_HA = {
-    D3netFanSpeed.Auto: FAN_AUTO,
-    D3netFanSpeed.Low: FAN_LOW,
-    D3netFanSpeed.LowMedium: FAN_MIDDLE,
-    D3netFanSpeed.Medium: FAN_MEDIUM,
-    D3netFanSpeed.HighMedium: FAN_HIGH,
-    D3netFanSpeed.High: FAN_TOP,
-}
-
-FANSPEED_HA_DAIKIN = {
-    FAN_AUTO: D3netFanSpeed.Auto,
-    FAN_LOW: D3netFanSpeed.Low,
-    FAN_MIDDLE: D3netFanSpeed.LowMedium,
-    FAN_MEDIUM: D3netFanSpeed.Medium,
-    FAN_HIGH: D3netFanSpeed.HighMedium,
-    FAN_TOP: D3netFanSpeed.High,
 }
 
 

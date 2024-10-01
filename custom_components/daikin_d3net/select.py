@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.climate import HVACMode
+from homeassistant.components.climate import FAN_OFF, FAN_ON
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -12,6 +12,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
 from .const import (
+    FANSPEED_DAIKIN_HA,
+    FANSPEED_HA_DAIKIN,
+    FANSPEEDCAPABILITY_DAIKIN_HA,
     MODE_DAIKIN_HA,
     MODE_HA_DAIKIN,
     MODE_HA_TEXT,
@@ -31,11 +34,12 @@ async def async_setup_entry(
     entities = []
     for unit in coordinator.gateway.units:
         entities.append(D3netSelectMode(coordinator, unit))
+        entities.append(D3netSelectFanSpeed(coordinator, unit))
     async_add_entities(entities)
 
 
-class D3netSensorBase(CoordinatorEntity, SelectEntity):
-    """Consolidation of sensor initialization."""
+class D3netSelectBase(CoordinatorEntity, SelectEntity):
+    """Consolidation of select initialization."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Initialize the sensor object."""
@@ -51,11 +55,11 @@ class D3netSensorBase(CoordinatorEntity, SelectEntity):
         self.async_write_ha_state()
 
 
-class D3netSelectMode(D3netSensorBase):
-    """Binary Sensor object for filter cleaning alter."""
+class D3netSelectMode(D3netSelectBase):
+    """Mode Select entity."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
-        """Initialize custom properties for this sensor."""
+        """Initialize custom properties the mode selector."""
         super().__init__(coordinator, unit)
         self._attr_name = self._attr_device_info["name"] + " Mode"
         self._attr_unique_id = self._attr_name
@@ -76,3 +80,27 @@ class D3netSelectMode(D3netSensorBase):
         await self._unit.writer.write(
             operating_mode=MODE_HA_DAIKIN[MODE_TEXT_HA[option]]
         )
+
+
+class D3netSelectFanSpeed(D3netSelectBase):
+    """Fan Speed Select Entity."""
+
+    def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
+        """Initialize custom properties for this sensor."""
+        super().__init__(coordinator, unit)
+        self._attr_name = self._attr_device_info["name"] + " Fan Speed"
+        self._attr_unique_id = self._attr_name
+        self._attr_options = []
+        for step in FANSPEEDCAPABILITY_DAIKIN_HA[unit.capabilities.fan_speed_steps]:
+            if step not in (FAN_ON, FAN_OFF):
+                self._attr_options.append(step.title())
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def current_option(self) -> str:
+        """Current Operating Mode."""
+        return FANSPEED_DAIKIN_HA[self._unit.status.fan_speed].title()
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the selected Mode."""
+        await self._unit.writer.write(fan_speed=FANSPEED_HA_DAIKIN[option.lower()])
