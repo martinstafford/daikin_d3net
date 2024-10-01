@@ -64,16 +64,12 @@ class D3netSwitchPower(D3netSwitchBase):
         self._attr_name = self._attr_device_info["name"] + " Power"
         self._attr_unique_id = self._attr_name
         self._attr_device_class = SwitchDeviceClass.SWITCH
+        self._attr_icon = "mdi:power-standby"
 
     @property
     def is_on(self) -> bool:
         """State of the Unit power."""
         return self._unit.status.power
-
-    @property
-    def icon(self) -> str:
-        """Icon for setpoint."""
-        return "mdi:power-on" if self._unit.status.power else "mdi:power-standby"
 
     async def async_turn_on(self, **kwargs):
         """Turn the entity on."""
