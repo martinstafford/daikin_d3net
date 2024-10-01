@@ -72,7 +72,7 @@ class D3netSelectMode(D3netSelectBase):
 
     @property
     def icon(self) -> str:
-        """Icon for setpoint."""
+        """Icon for Operating Mode."""
         return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
 
     async def async_select_option(self, option: str) -> None:
@@ -86,7 +86,7 @@ class D3netSelectFanSpeed(D3netSelectBase):
     """Fan Speed Select Entity."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
-        """Initialize custom properties for this sensor."""
+        """Initialize custom properties for the Fan Speed selector."""
         super().__init__(coordinator, unit)
         self._attr_name = self._attr_device_info["name"] + " Fan Speed"
         self._attr_unique_id = self._attr_name
@@ -98,9 +98,9 @@ class D3netSelectFanSpeed(D3netSelectBase):
 
     @property
     def current_option(self) -> str:
-        """Current Operating Mode."""
+        """Current Fan Speed."""
         return FANSPEED_DAIKIN_HA[self._unit.status.fan_speed].title()
 
     async def async_select_option(self, option: str) -> None:
-        """Change the selected Mode."""
+        """Change the Fan Speed."""
         await self._unit.writer.write(fan_speed=FANSPEED_HA_DAIKIN[option.lower()])

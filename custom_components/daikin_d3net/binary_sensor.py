@@ -25,11 +25,11 @@ async def async_setup_entry(
     coordinator: D3netCoordinator = entry.runtime_data
     entities = []
     for unit in coordinator.gateway.units:
-        entities.append(D3netSensorFilter(coordinator, unit))
+        entities.append(D3netBinarySensorFilter(coordinator, unit))
     async_add_entities(entities)
 
 
-class D3netSensorBase(CoordinatorEntity, BinarySensorEntity):
+class D3netBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
     """Consolidation of sensor initialization."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
@@ -46,7 +46,7 @@ class D3netSensorBase(CoordinatorEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
 
-class D3netSensorFilter(D3netSensorBase):
+class D3netBinarySensorFilter(D3netBinarySensorBase):
     """Binary Sensor object for filter cleaning alter."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:

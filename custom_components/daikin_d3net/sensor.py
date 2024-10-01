@@ -81,7 +81,7 @@ class D3netSensorState(D3netSensorBase):
 
     @property
     def native_value(self) -> str:
-        """Current temperature in the room."""
+        """Current operating mode."""
         return (
             MODE_HA_TEXT[MODE_DAIKIN_HA[self._unit.status.operating_mode]]
             if self._unit.status.power
@@ -90,7 +90,7 @@ class D3netSensorState(D3netSensorBase):
 
     @property
     def icon(self) -> str:
-        """Icon for setpoint."""
+        """Icon for operating mode."""
         if not self._unit.status.power:
             return "mdi:power-standby"
         return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
