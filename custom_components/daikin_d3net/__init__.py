@@ -39,7 +39,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Setup %s.%s", DOMAIN, name)
 
-    gateway = D3netGateway(AsyncModbusTcpClient(host=host, port=port), slave)
+    gateway = D3netGateway(
+        AsyncModbusTcpClient(host=host, port=port, timeout=10), slave
+    )
     await gateway.async_setup()
     entry.runtime_data = D3netCoordinator(hass, gateway, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
