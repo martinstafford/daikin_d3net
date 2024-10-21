@@ -73,8 +73,10 @@ class D3netSwitchPower(D3netSwitchBase):
 
     async def async_turn_on(self, **kwargs):
         """Turn the entity on."""
-        await self._unit.writer.write(power=True)
+        self._unit.holding.power = True
+        self._unit.write()
 
     async def async_turn_off(self, **kwargs):
         """Turn the entity off."""
-        await self._unit.writer.write(power=False)
+        self._unit.holding.power = False
+        await self._unit.write()
