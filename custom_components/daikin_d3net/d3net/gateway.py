@@ -97,7 +97,7 @@ class D3netGateway:
                         self._units.append(unit)
 
         for unit in self._units:
-            await unit.update()
+            await unit.async_update_status()
 
     async def async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object."""
@@ -189,26 +189,31 @@ class D3netUnit:
             self._error = self._gateway.async_read(UnitError, self._index)
         return self._error
 
-    async def update(self):
+    async def async_update_status(self):
         """Load unit status"""
         # Don't update status if we've just written
         if self._holding is None or not self._holding.writeWithin(CACHE_WRITE):
             self._status = await self._gateway.async_read(UnitStatus, self._index)
 
-    async def writePrepare(self):
-        """Prepare the holding registers for a write"""
-        # Only reload holding if it's not dirty and older than CACHE_WRITE
+    async def async_write_prepare(self):
+        """Prepare the holding registers for a write by reading them and making sure they match the current status."""
+        # Only reload holding if it's not dirty and older than CACHE_WRITE, otherwise assume we're authorative.
         if self._holding is None or (
-            not self._holding.dirty and not self._holding.readWithin(CACHE_WRITE)
+            not self._holding.dirty
+            and not self._holding.readWithin(CACHE_WRITE)
+            and not self._holding.writeWithin(CACHE_WRITE)
         ):
-            _LOGGER.info("Write Prepare holding: %s", self._holding)
             self._holding = await self._gateway.async_read(UnitHolding, self._index)
+            reg = self._holding.registers
             self._holding.sync(self._status, self.SYNC_PROPERTIES)
-            _LOGGER.info("Write Prepare dirty: %s", self._holding.dirty)
-            await self._gateway.async_write(self._holding, self._index)
+            if self._holding.dirty:
+                _LOGGER.info(
+                    "Holding out of sync. Holding: %s, Status: %s ", reg, self._holding
+                )
+                # Syncing the status to the holding registers could have dirtied them so write the current before we change.
+                await self._gateway.async_write(self._holding, self._index)
 
-    async def writeCommit(self):
-        """Write any dirty holding registers"""
+    async def async_write_commit(self):
+        """Write any dirty holding registers."""
         self._holding.sync(self._status, self.SYNC_PROPERTIES)
-        _LOGGER.info("Write Commit dirty: %s", self._holding.dirty)
         await self._gateway.async_write(self._holding, self._index)

@@ -67,7 +67,7 @@ class D3netNumberSetpoint(D3netNumberBase):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.temp_setpoint = value
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()

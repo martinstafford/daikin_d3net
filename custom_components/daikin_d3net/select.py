@@ -77,9 +77,9 @@ class D3netSelectMode(D3netSelectBase):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected Mode."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.operating_mode = MODE_HA_DAIKIN[MODE_TEXT_HA[option]]
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
 
 
@@ -104,7 +104,7 @@ class D3netSelectFanSpeed(D3netSelectBase):
 
     async def async_select_option(self, option: str) -> None:
         """Change the Fan Speed."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.fan_speed = FANSPEED_HA_DAIKIN[option.lower()]
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()

@@ -111,4 +111,4 @@ class D3netCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Update the status of all units."""
         for unit in self._gateway.units:
-            await unit.update()
+            await unit.async_update_status()

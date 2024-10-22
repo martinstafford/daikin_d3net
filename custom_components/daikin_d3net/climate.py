@@ -169,39 +169,39 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
 
     async def async_turn_on(self) -> None:
         """Turn on the unit."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.power = True
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
 
     async def async_turn_off(self) -> None:
         """Turn off the unit."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.power = False
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the HVAC mode."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         if hvac_mode is HVACMode.OFF:
             self._unit.status.power = False
         else:
             self._unit.status.power = True
             self._unit.status.operating_mode = MODE_HA_DAIKIN[hvac_mode]
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs) -> None:
         """Set new target temperature."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.temp_setpoint = kwargs["temperature"]
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new fan mode."""
-        await self._unit.writePrepare()
+        await self._unit.async_write_prepare()
         self._unit.status.fan_speed = FANSPEED_HA_DAIKIN[fan_mode]
-        await self._unit.writeCommit()
+        await self._unit.async_write_commit()
         self.async_write_ha_state()
