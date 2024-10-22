@@ -1,115 +1,134 @@
 """Daikin DIII-Net Modbus data structures."""
 
 import logging
+import time
 
 from .const import (
     D3netFanDirection,
     D3netFanSpeed,
     D3netFanSpeedCapability,
     D3netOperationMode,
+    D3netRegisterType,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class EncodingBase:
+class InputBase:
     """Base class of data structues."""
 
     ADDRESS = None
     COUNT = None
+    TYPE = D3netRegisterType.Input
 
-    def __init__(self, unit, registers: list[int]) -> None:
+    def __init__(self, registers: list[int]) -> None:
         """Initialize the base object."""
+
+        if self.ADDRESS is None:
+            raise ValueError("Modbus address not set")
+        if self.COUNT != len(registers):
+            raise ValueError(
+                "Register array length (%s) difference from object expection (%s)"
+                % (len(registers), self.COUNT)
+            )
+
         self._registers = registers
-        self._unit = unit
         self._dirty = False
+        self._timeRead = time.perf_counter()
 
-    @property
-    def registers(self) -> list[int]:
-        return self._registers
+    def _bit(self, bit: int, value: bool | None = None):
+        """Base bit manipulation of the register array"""
+        register = int(bit / 16)
+        mask = 1 << (bit % 16)
 
-    @property
-    def unit(self):
-        return self._unit
+        if self.COUNT is None:
+            raise ValueError("Object register count not set")
+        if register > self.COUNT:
+            raise ValueError("Reading outside of register buffer")
+
+        current = self._registers[register] & mask > 0
+        if value is None or value == current:
+            return current
+
+        self._register[register] += mask * (1 if value else -1)
+        self._dirty = True
+        return value
+
+    def _decode_bit_array(self, start, length):
+        """Decode a word into an array of bits."""
+        return [self._bit(x) for x in range(start, start + length)]
+
+    def _decode_bit(self, start) -> bool:
+        """Decode an int from the registers."""
+        return self._bit(start)
+
+    def _decode_uint(self, start, length) -> int:
+        """Decode an int from the registers."""
+        result: int = 0
+        for bit in range(length):
+            if self._bit(start + bit):
+                result += 1 << bit
+        return result
+
+    def _decode_sint(self, start, length) -> int:
+        result = self._decode_uint(start, length - 1)
+        if self._bit(start + length):
+            result = 0 - result
+        return result
+
+    def _encode_bit(self, start: int, value: bool):
+        """Encode a bit into a position in a register."""
+        self._bit(start, value)
+
+    def _encode_uint(self, start: int, length: int, value: int):
+        for bit in range(length):
+            self._bit(start + bit, (value & 1 << bit) > 0)
+
+    def _encode_sint(self, start: int, length: int, value: int):
+        self._encode_uint(start, length - 1, abs(value))
+        self._encode_bit(start + length - 1, value < 0)
+
+    def readWithin(self, seconds: float):
+        """The time the object was last read"""
+        return time.perf_counter() - self._timeRead < seconds
+
+
+class HoldingBase(InputBase):
+    """Base class for Holding Registers."""
+
+    TYPE = D3netRegisterType.Holding
+
+    def __init__(self, registers) -> None:
+        """Initialization specific for Holding registers"""
+        super().__init__(registers)
+        self._timeWrite = None
 
     @property
     def dirty(self) -> bool:
         """Return the dirty state of the object."""
         return self._dirty
 
-    @dirty.setter
-    def dirty(self, state: bool):
-        """Set the dirty state of the object."""
-        self._dirty = state
+    def sync(self, source, properties: list[str]):
+        """Copy properties in from another object"""
+        for property in properties:
+            setattr(self, property, getattr(source, property))
 
-    def _decode_bit_array(self, start, length):
-        """Decode a word into an array of bits."""
-        if start + length > self.COUNT * 16:
-            raise ValueError("Reading outside of register buffer")
-        return [
-            (self._registers[int(x / 16)] & (1 << x % 16) > 0)
-            for x in range(start, start + length)
-        ]
+    def writeWithin(self, seconds: float):
+        """The time the object was last written"""
+        if self._timeWrite is None:
+            return False
+        return time.perf_counter() - self._timeWrite < seconds
 
-    def _decode_bit(self, start) -> bool:
-        """Decode an int from the registers."""
-        if start > self.COUNT * 16:
-            raise ValueError("Reading outside of register buffer")
-
-        return self._registers[int(start / 16)] & (1 << (start % 16)) > 0
-
-    def _decode_uint(self, start, length) -> int:
-        """Decode an int from the registers."""
-        if length > 64:
-            raise ValueError("Maximum decode length exceeded")
-        if start + length > self.COUNT * 16:
-            raise ValueError("Reading outside of register buffer")
-
-        result: int = 0
-        for bit in range(length):
-            if self._registers[int((start + bit) / 16)] & (1 << ((start + bit) % 16)):
-                result += 1 << bit
-        return result
-
-    def _decode_sint(self, start, length) -> int:
-        result = self._decode_uint(start, length - 1)
-        if self._decode_bit(start + length):
-            result = 0 - result
-        return result
-
-    def _zero(self, start: int, length: int) -> int:
-        """Zeros bits in the register array."""
-        for bit in range(start, start + length):
-            if self._register[int(bit / 16)] & 1 << bit % 16:
-                self._register[int(bit / 16)] -= 1 << bit % 16
-
-    def _encode_bit(self, start: int, value: bool):
-        """Encode a bit into a position in a register."""
-        self._zero(start, 1)
-        if value:
-            self._register[int(start / 16)] += 1 << start % 16
-
-    def _encode_uint(self, start: int, length: int, value: int):
-        self._zero(start, length)
-        for bit in range(length):
-            if value & 1 << bit:
-                self._register[int(start / 16)] += 1 << (start + bit) % 16
-
-    def _encode_sint(self, start: int, length: int, value: int):
-        self._zero(start, length)
-        self._encode_uint(start, length - 1, abs(value))
-        self._encode_bit(start + length - 1, value < 0)
+    def written(self):
+        self._timeWrite = time.perf_counter()
+        self._dirty = False
 
 
-class DecodeSystemStatus(EncodingBase):
+class SystemStatus(InputBase):
     """Decode System Status."""
 
     ADDRESS = 0
     COUNT = 9
-
-    def __init__(self, registers) -> None:
-        """Decode unit capability."""
-        super().__init__(registers)
 
     @property
     def initialised(self) -> bool:
@@ -132,15 +151,11 @@ class DecodeSystemStatus(EncodingBase):
         return self._decode_bit_array(80, 64)
 
 
-class DecodeUnitCapability(EncodingBase):
+class UnitCapability(InputBase):
     """Decode Unit Capabilities."""
 
     ADDRESS = 1000
     COUNT = 3
-
-    def __init__(self, registers) -> None:
-        """Decode unit capability."""
-        super().__init__(registers)
 
     @property
     def fan_mode_capable(self) -> bool:
@@ -208,15 +223,11 @@ class DecodeUnitCapability(EncodingBase):
         return self._decode_sint(40, 8)
 
 
-class DecodeUnitStatus(EncodingBase):
+class UnitStatus(InputBase):
     """Decode Unit Status."""
 
     ADDRESS = 2000
     COUNT = 6
-
-    def __init__(self, registers) -> None:
-        """Decode unit status."""
-        super().__init__(registers)
 
     @property
     def power(self) -> bool:
@@ -227,7 +238,6 @@ class DecodeUnitStatus(EncodingBase):
     def power(self, state: bool):
         """Set the power state of the unit."""
         self._encode_bit(0, state)
-        self._dirty = True
 
     @property
     def forced_off(self) -> bool:
@@ -263,7 +273,6 @@ class DecodeUnitStatus(EncodingBase):
     def fan_direct(self, direct: D3netFanDirection):
         """Set the fan direction."""
         self._encode_uint(8, 3, direct.value)
-        self._dirty = True
 
     @property
     def fan_speed(self) -> D3netFanSpeed:
@@ -274,7 +283,6 @@ class DecodeUnitStatus(EncodingBase):
     def fan_speed(self, speed: D3netFanSpeed):
         """Set the fan speed."""
         self._encode_uint(12, 3, speed.value)
-        self._dirty = True
 
     @property
     def operating_mode(self):
@@ -285,7 +293,6 @@ class DecodeUnitStatus(EncodingBase):
     def operating_mode(self, mode: D3netOperationMode):
         """Set the operating mode"""
         self._encode_uint(16, 4, mode.value)
-        self._dirty = True
 
     @property
     def filter_warning(self) -> bool:
@@ -296,7 +303,6 @@ class DecodeUnitStatus(EncodingBase):
     def filter_warning(self, state: bool):
         """Reset the filter status."""
         self._encode_uint(20, 4, 15 if state else 0)
-        self._dirty = True
 
     @property
     def operating_current(self) -> D3netOperationMode:
@@ -315,8 +321,8 @@ class DecodeUnitStatus(EncodingBase):
 
     @temp_setpoint.setter
     def temp_setpoint(self, setpoint: float):
+        """Set the setpoint temperature"""
         self._encode_sint(32, 16, int(setpoint * 10))
-        self._dirty = True
 
     @property
     def temp_current(self) -> float:
@@ -324,15 +330,11 @@ class DecodeUnitStatus(EncodingBase):
         return self._decode_sint(64, 16) / 10
 
 
-class DecodeUnitError(EncodingBase):
+class UnitError(InputBase):
     """Decode Unit Errors."""
 
     ADDRESS = 3600
     COUNT = 2
-
-    def __init__(self, registers) -> None:
-        """Decode unit Errors."""
-        super().__init__(registers)
 
     @property
     def error_code(self) -> str:
@@ -365,30 +367,11 @@ class DecodeUnitError(EncodingBase):
         return self._decode_uint(28, 4)
 
 
-class DecodeHolding(EncodingBase):
+class UnitHolding(HoldingBase):
     """Decode the holding registers."""
 
     ADDRESS = 2000
     COUNT = 3
-
-    SYNC_PROPERTIES = [
-        "power",
-        "fan_direct",
-        "fan_speed",
-        "operating_mode",
-        "temp_setpoint",
-        "filter_warning",
-    ]
-
-    def __init__(self, unit, registers: list[int]) -> None:
-        """Initialize the writer."""
-        self._unit = unit
-        super().__init__(registers)
-
-        # Copy in any statuses from the unit status
-        for property in self.SYNC_PROPERTIES:
-            if getattr(self, property) != getattr(unit.status, property):
-                setattr(self, property, getattr(unit.status, property))
 
     @property
     def power(self) -> bool:
@@ -399,8 +382,6 @@ class DecodeHolding(EncodingBase):
     def power(self, state: bool):
         """Set the power state of the unit."""
         self._encode_bit(0, state)
-        self._dirty = True
-        self.unit.status.power = state
 
     @property
     def fan_direct(self) -> D3netFanDirection:
@@ -411,8 +392,6 @@ class DecodeHolding(EncodingBase):
     def fan_direct(self, direct: D3netFanDirection):
         """Set the fan direction."""
         self._encode_uint(8, 3, direct.value)
-        self._dirty = True
-        self.unit.status.fan_direct = direct
 
     @property
     def fan_speed(self) -> D3netFanSpeed:
@@ -423,8 +402,6 @@ class DecodeHolding(EncodingBase):
     def fan_speed(self, speed: D3netFanSpeed):
         """Set the fan speed."""
         self._encode_uint(12, 3, speed.value)
-        self._dirty = True
-        self.unit.status.fan_speed = speed
 
     @property
     def operating_mode(self):
@@ -435,8 +412,6 @@ class DecodeHolding(EncodingBase):
     def operating_mode(self, mode: D3netOperationMode):
         """Set the operating mode"""
         self._encode_uint(16, 4, mode.value)
-        self._dirty = True
-        self.unit.status.operating_mode = mode
 
     @property
     def temp_setpoint(self) -> float:
@@ -446,8 +421,6 @@ class DecodeHolding(EncodingBase):
     @temp_setpoint.setter
     def temp_setpoint(self, setpoint: float):
         self._encode_sint(32, 16, int(setpoint * 10))
-        self._dirty = True
-        self.unit.status.temp_setpoint = setpoint
 
     @property
     def filter_warning(self) -> bool:
@@ -458,5 +431,3 @@ class DecodeHolding(EncodingBase):
     def filter_warning(self, state: bool):
         """Reset the filter status."""
         self._encode_uint(20, 4, 15 if state else 0)
-        self._dirty = True
-        self.unit.status.filter_warning = state

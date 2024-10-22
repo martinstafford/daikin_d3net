@@ -47,3 +47,8 @@ class D3netFanDirection(Enum):
     P4 = 4
     Stop = 6
     Swing = 7
+
+
+class D3netRegisterType(Enum):
+    Input = "input"
+    Holding = "holding"

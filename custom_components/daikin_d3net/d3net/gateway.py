@@ -5,22 +5,30 @@ import logging
 import time
 
 from pymodbus.client import ModbusBaseClient
+from pymodbus.pdu import ModbusResponse
 
 from .encoding import (
-    EncodingBase,
-    DecodeSystemStatus,
-    DecodeUnitCapability,
-    DecodeUnitError,
-    DecodeUnitStatus,
-    DecodeHolding,
+    UnitHolding,
+    SystemStatus,
+    UnitCapability,
+    UnitError,
+    UnitStatus,
+    HoldingBase,
+    InputBase,
 )
+
+from .const import D3netRegisterType
 
 _LOGGER = logging.getLogger(__name__)
 
 # Seconds between modbus access
 THROTTLE_DELAY = 0.025
 # Seconds before we read from a unit after writing to it
-WRITE_SYNC = 5
+CACHE_WRITE = 5
+# Seconds before we reload status information
+CACHE_READ = 60
+# Seconds before we reload error information
+CACHE_ERROR = 10
 
 
 class D3netGateway:
@@ -29,13 +37,13 @@ class D3netGateway:
     def __init__(self, client: ModbusBaseClient, slave: int) -> None:
         """Initialise the D3net Gateway."""
         self._slave = slave
-        self._client = client
-        self._units = None
+        self._client: ModbusBaseClient = client
+        self._units: D3netUnit | None = None
         self._throttle = None
         self._lock = asyncio.Lock()
 
     @property
-    def units(self):
+    def units(self) -> list[D3netUnit]:
         """Return the Units."""
         return self._units
 
@@ -70,70 +78,13 @@ class D3netGateway:
         async with self._lock:
             await self._client.close()
 
-    async def _async_unit_status(self, unit):
-        """Perform the unit update. Lock must already be held."""
-        await self._throttle_start()
-        response = await self._client.read_input_registers(
-            address=DecodeUnitStatus.ADDRESS + unit.index * DecodeUnitStatus.COUNT,
-            count=DecodeUnitStatus.COUNT,
-            slave=self._slave,
-        )
-        await self._throttle_end()
-        unit.status = DecodeUnitStatus(unit, response.registers)
-
-    async def _async_unit_capabilities(self, unit):
-        """Retrieve the unit capabilities."""
-        await self._throttle_start()
-        # _LOGGER.info("Determining capabilities for Unit %s", unit.unit_id)
-        response = await self._client.read_input_registers(
-            address=DecodeUnitCapability.ADDRESS
-            + unit.index * DecodeUnitCapability.COUNT,
-            count=DecodeUnitCapability.COUNT,
-            slave=self._slave,
-        )
-        await self._throttle_end()
-        unit.capabilities = DecodeUnitCapability(unit, response.registers)
-
-    async def _async_unit_holding(self, unit):
-        """Read unit holding registers. Lock must already be held."""
-        await self._throttle_start()
-        response = await self._client.read_holding_registers(
-            address=DecodeHolding.ADDRESS + unit.index * DecodeHolding.COUNT,
-            count=DecodeHolding.COUNT,
-            slave=self._slave,
-        )
-        await self._throttle_end()
-        unit.holding = DecodeHolding(unit, registers=response.registers)
-        # Write it after loading incase it became dirty
-        await self._async_write_holding(unit.holding)
-
-    async def _async_write_holding(self, decode: EncodingBase):
-        """Write a set of holding registers."""
-        if decode.dirty:
-            await self._throttle_start()
-            address = decode.ADDRESS + decode.unit.index * decode.COUNT
-            _LOGGER.info("Writing %s to address %s", decode.registers, address)
-            await self._client.write_registers(
-                address=address, slave=self._slave, values=decode.registers
-            )
-            await self._throttle_end()
-            decode.dirty = False
-            decode.unit.lastWritten = time.perf_counter()
-
     async def async_setup(self):
         """Return a bool array of connected units."""
         async with self._lock:
             await self._async_connect()
             if not self._units:
                 self._units = []
-                await self._throttle_start()
-                system_status = await self._client.read_input_registers(
-                    address=DecodeSystemStatus.ADDRESS,
-                    count=DecodeSystemStatus.COUNT,
-                    slave=self._slave,
-                )
-                await self._throttle_end()
-                system_decoder = DecodeSystemStatus(None, system_status.registers)
+                system_decoder = await self._async_read(SystemStatus)
                 _LOGGER.info(
                     "System Connected: %s, Initialised: %s",
                     system_decoder.connected,
@@ -142,38 +93,75 @@ class D3netGateway:
 
                 for index, connected in enumerate(system_decoder.units_connected):
                     if connected:
-                        unit = D3netUnit(self, index)
+                        capabilities = await self._async_read(UnitCapability, index)
+                        unit = D3netUnit(self, index, capabilities)
                         self._units.append(unit)
-                        await self._async_unit_capabilities(unit)
-                        await self._async_unit_status(unit)
-                        await self._async_unit_holding(unit)
 
-    async def async_unit_status(self, unit=None):
-        """Update the status of the supplied unit, or all units if none supplied."""
+        for unit in self._units:
+            await unit.update()
+
+    async def async_read(self, decoder: type[InputBase], index: int = 0) -> InputBase:
+        """Load registers and return a decode object."""
         async with self._lock:
             await self._async_connect()
-            for item in [unit] if unit else self._units:
-                await self._async_unit_status(item)
+            self._async_read(decoder, index)
 
-    async def async_write(self, decode: EncodingBase):
+    async def _async_read(self, decoder: type[InputBase], index: int = 0) -> InputBase:
+        """Load registers and return a decode object. Must already hold a lock and connection."""
+        await self._throttle_start()
+        response: ModbusResponse = None
+        if decoder.TYPE == D3netRegisterType.Holding:
+            response = await self._client.read_holding_registers(
+                address=decoder.ADDRESS + index * decoder.COUNT,
+                count=decoder.COUNT,
+                slave=self._slave,
+            )
+        else:
+            response = await self._client.read_input_registers(
+                address=decoder.ADDRESS + index * decoder.COUNT,
+                count=decoder.COUNT,
+                slave=self._slave,
+            )
+        await self._throttle_end()
+        return type(response.registers)
+
+    async def async_write(self, decode: HoldingBase):
         """Write a register."""
         if decode.dirty:
             async with self._lock:
                 await self._async_connect()
-                await self._async_write_holding(decode)
+                await self._throttle_start()
+                address = decode.ADDRESS + decode.unit.index * decode.COUNT
+                _LOGGER.info("Writing %s to address %s", decode.registers, address)
+                await self._client.write_registers(
+                    address=address, slave=self._slave, values=decode.registers
+                )
+                await self._throttle_end()
+                decode.written()
 
 
 class D3netUnit:
     """Daikin Modbus Unit Configration."""
 
-    def __init__(self, gateway: D3netGateway, index: int) -> None:
+    SYNC_PROPERTIES = [
+        "power",
+        "fan_direct",
+        "fan_speed",
+        "operating_mode",
+        "temp_setpoint",
+        "filter_warning",
+    ]
+
+    def __init__(
+        self, gateway: D3netGateway, index: int, capabilities: UnitCapability
+    ) -> None:
         """Unit Initializer."""
         self._gateway = gateway
         self._index = index
-        self._capabilities: DecodeUnitCapability | None = None
-        self._status: DecodeUnitStatus | None = None
-        self._holding: DecodeHolding | None = None
-        self._written: float | None = None
+        self._capabilities: capabilities
+        self._status: UnitStatus | None = None
+        self._holding: UnitHolding | None = None
+        self._error: UnitError | None = None
 
     @property
     def index(self) -> int:
@@ -181,61 +169,41 @@ class D3netUnit:
         return self._index
 
     @property
-    def lastWritten(self) -> float:
-        """Timestamp the unit was last written to"""
-        return self._written
-
-    @lastWritten.setter
-    def lastWritten(self, stamp: float):
-        """Timestamp the unit was last written to"""
-        self._written = stamp
-
-    @property
     def unit_id(self) -> str:
         """Return the Daikin unit ID."""
         return f"{int(self._index/16+1)}-{self._index % 16:02d}"
 
     @property
-    def gateway(self) -> D3netGateway:
-        """Return the interface."""
-        return self._gateway
-
-    @property
-    def capabilities(self) -> DecodeUnitCapability:
+    def capabilities(self) -> UnitCapability:
         """Capabilities object for the unit."""
         return self._capabilities
 
-    @capabilities.setter
-    def capabilities(self, capabilities: DecodeUnitCapability):
-        """Set the capabilities object for the unit."""
-        self._capabilities = capabilities
-
     @property
-    def status(self) -> DecodeUnitStatus:
+    def status(self) -> UnitStatus:
         """Status object for the unit."""
         return self._status
 
-    @status.setter
-    def status(self, status: DecodeUnitStatus):
-        """Set the capabilities object for the unit."""
-        self._status = status
-
     @property
-    def error(self) -> DecodeUnitError:
+    def error(self) -> UnitError:
         """Error object for the unit."""
+        if self._error is None or not self._holding.readWithin(CACHE_ERROR):
+            self._error = self._gateway.async_read(UnitError, self._index)
         return self._error
 
-    @error.setter
-    def error(self, error: DecodeUnitError):
-        """Set the Error object for the unit."""
-        self._error = error
+    async def update(self):
+        """Load unit status"""
+        self._status = self._gateway.async_read(UnitStatus, self._index)
 
-    @property
-    def holding(self):
-        """Writer to update settings back to unit."""
-        return self._holding
+    async def writePrepare(self):
+        """Prepare the holding registers for a write"""
+        if self._holding is None or (
+            not self._holding.dirty and not self._holding.readWithin(CACHE_WRITE)
+        ):
+            self._holding = await self._gateway.async_read(UnitHolding, self._index)
+            self._holding.sync(self._status, self.SYNC_PROPERTIES)
+            await self._gateway.async_write(self._holding)
 
-    @holding.setter
-    def holding(self, holding: DecodeHolding):
-        """Set the Writer object for the unit."""
-        self._holding = holding
+    async def writeCommit(self):
+        """Write any dirty holding registers"""
+        self._holding.sync(self._status, self.SYNC_PROPERTIES)
+        await self.gateway.async_write(self._holding)
