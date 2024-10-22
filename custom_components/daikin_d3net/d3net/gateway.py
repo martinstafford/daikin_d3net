@@ -95,12 +95,11 @@ class D3netGateway:
                         capabilities: UnitCapability = await self._async_read(
                             UnitCapability, index
                         )
-                        unit = D3netUnit(self, index, capabilities)
+                        status: UnitStatus = await self._async_read(
+                            UnitStatus, index
+                        )
+                        unit = D3netUnit(self, index, capabilities, status)
                         self._units.append(unit)
-
-        # Update the unit status outside of the lock
-        for unit in self._units:
-            await unit.async_update_status()
 
     async def async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object."""
@@ -156,13 +155,13 @@ class D3netUnit:
     ]
 
     def __init__(
-        self, gateway: D3netGateway, index: int, capabilities: UnitCapability
+        self, gateway: D3netGateway, index: int, capabilities: UnitCapability, status: UnitStatus
     ) -> None:
         """Unit Initializer."""
         self._gateway = gateway
         self._index = index
         self._capabilities: UnitCapability = capabilities
-        self._status: UnitStatus | None = None
+        self._status: UnitStatus = status
         self._holding: UnitHolding | None = None
         self._error: UnitError | None = None
 
