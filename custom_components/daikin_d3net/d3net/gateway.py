@@ -92,10 +92,13 @@ class D3netGateway:
 
                 for index, connected in enumerate(system_decoder.units_connected):
                     if connected:
-                        capabilities = await self._async_read(UnitCapability, index)
+                        capabilities: UnitCapability = await self._async_read(
+                            UnitCapability, index
+                        )
                         unit = D3netUnit(self, index, capabilities)
                         self._units.append(unit)
 
+        # Update the unit status outside of the lock
         for unit in self._units:
             await unit.async_update_status()
 
@@ -109,15 +112,16 @@ class D3netGateway:
         """Load registers and return a decode object. Must already hold a lock and connection."""
         await self._throttle_start()
         response: ModbusResponse = None
+        address = Decoder.ADDRESS + index * Decoder.COUNT
         if Decoder.TYPE == D3netRegisterType.Holding:
             response = await self._client.read_holding_registers(
-                address=Decoder.ADDRESS + index * Decoder.COUNT,
+                address=address,
                 count=Decoder.COUNT,
                 slave=self._slave,
             )
         else:
             response = await self._client.read_input_registers(
-                address=Decoder.ADDRESS + index * Decoder.COUNT,
+                address=address,
                 count=Decoder.COUNT,
                 slave=self._slave,
             )
@@ -183,7 +187,7 @@ class D3netUnit:
         return self._status
 
     @property
-    def error(self) -> UnitError:
+    def errors(self) -> UnitError:
         """Error object for the unit."""
         if self._error is None or not self._holding.readWithin(CACHE_ERROR):
             self._error = self._gateway.async_read(UnitError, self._index)
@@ -207,13 +211,16 @@ class D3netUnit:
             reg = self._holding.registers
             self._holding.sync(self._status, self.SYNC_PROPERTIES)
             if self._holding.dirty:
+                # The holding registers are out of sync with status, so update them before making changes.
+                # This is the whole point of doing a Prepare.
                 _LOGGER.info(
                     "Holding out of sync. Holding: %s, Status: %s ", reg, self._holding
                 )
-                # Syncing the status to the holding registers could have dirtied them so write the current before we change.
                 await self._gateway.async_write(self._holding, self._index)
 
     async def async_write_commit(self):
         """Write any dirty holding registers."""
+        # Copy the updated status registers into the holding registers
         self._holding.sync(self._status, self.SYNC_PROPERTIES)
+        # They'll only write if there was something made dirty
         await self._gateway.async_write(self._holding, self._index)

@@ -59,11 +59,11 @@ class InputBase:
         return [self._bit(x) for x in range(start, start + length)]
 
     def _decode_bit(self, start) -> bool:
-        """Decode an int from the registers."""
+        """Decode a bit from the registers."""
         return self._bit(start)
 
     def _decode_uint(self, start, length) -> int:
-        """Decode an int from the registers."""
+        """Decode an unsigned int from the registers."""
         result: int = 0
         for bit in range(length):
             if self._bit(start + bit):
@@ -71,6 +71,7 @@ class InputBase:
         return result
 
     def _decode_sint(self, start, length) -> int:
+        """Decode a signed int from the registers."""
         result = self._decode_uint(start, length - 1)
         if self._bit(start + length):
             result = 0 - result
