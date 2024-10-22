@@ -7,17 +7,16 @@ import time
 from pymodbus.client import ModbusBaseClient
 from pymodbus.pdu import ModbusResponse
 
+from .const import D3netRegisterType
 from .encoding import (
-    UnitHolding,
+    HoldingBase,
+    InputBase,
     SystemStatus,
     UnitCapability,
     UnitError,
+    UnitHolding,
     UnitStatus,
-    HoldingBase,
-    InputBase,
 )
-
-from .const import D3netRegisterType
 
 _LOGGER = logging.getLogger(__name__)
 
