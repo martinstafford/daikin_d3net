@@ -42,7 +42,7 @@ class D3netGateway:
         self._lock = asyncio.Lock()
 
     @property
-    def units(self) -> list[D3netUnit]:
+    def units(self):
         """Return the Units."""
         return self._units
 
@@ -83,7 +83,7 @@ class D3netGateway:
             await self._async_connect()
             if not self._units:
                 self._units = []
-                system_decoder = await self._async_read(SystemStatus)
+                system_decoder: SystemStatus = await self._async_read(SystemStatus)
                 _LOGGER.info(
                     "System Connected: %s, Initialised: %s",
                     system_decoder.connected,
@@ -99,38 +99,38 @@ class D3netGateway:
         for unit in self._units:
             await unit.update()
 
-    async def async_read(self, decoder: type[InputBase], index: int = 0) -> InputBase:
+    async def async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object."""
         async with self._lock:
             await self._async_connect()
-            self._async_read(decoder, index)
+            return await self._async_read(Decoder, index)
 
-    async def _async_read(self, decoder: type[InputBase], index: int = 0) -> InputBase:
+    async def _async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object. Must already hold a lock and connection."""
         await self._throttle_start()
         response: ModbusResponse = None
-        if decoder.TYPE == D3netRegisterType.Holding:
+        if Decoder.TYPE == D3netRegisterType.Holding:
             response = await self._client.read_holding_registers(
-                address=decoder.ADDRESS + index * decoder.COUNT,
-                count=decoder.COUNT,
+                address=Decoder.ADDRESS + index * Decoder.COUNT,
+                count=Decoder.COUNT,
                 slave=self._slave,
             )
         else:
             response = await self._client.read_input_registers(
-                address=decoder.ADDRESS + index * decoder.COUNT,
-                count=decoder.COUNT,
+                address=Decoder.ADDRESS + index * Decoder.COUNT,
+                count=Decoder.COUNT,
                 slave=self._slave,
             )
         await self._throttle_end()
-        return type(response.registers)
+        return Decoder(response.registers)
 
-    async def async_write(self, decode: HoldingBase):
+    async def async_write(self, decode: HoldingBase, index: int):
         """Write a register."""
         if decode.dirty:
             async with self._lock:
                 await self._async_connect()
                 await self._throttle_start()
-                address = decode.ADDRESS + decode.unit.index * decode.COUNT
+                address = decode.ADDRESS + index * decode.COUNT
                 _LOGGER.info("Writing %s to address %s", decode.registers, address)
                 await self._client.write_registers(
                     address=address, slave=self._slave, values=decode.registers
@@ -157,7 +157,7 @@ class D3netUnit:
         """Unit Initializer."""
         self._gateway = gateway
         self._index = index
-        self._capabilities: capabilities
+        self._capabilities: UnitCapability = capabilities
         self._status: UnitStatus | None = None
         self._holding: UnitHolding | None = None
         self._error: UnitError | None = None
@@ -191,18 +191,24 @@ class D3netUnit:
 
     async def update(self):
         """Load unit status"""
-        self._status = self._gateway.async_read(UnitStatus, self._index)
+        # Don't update status if we've just written
+        if self._holding is None or not self._holding.writeWithin(CACHE_WRITE):
+            self._status = await self._gateway.async_read(UnitStatus, self._index)
 
     async def writePrepare(self):
         """Prepare the holding registers for a write"""
+        # Only reload holding if it's not dirty and older than CACHE_WRITE
         if self._holding is None or (
             not self._holding.dirty and not self._holding.readWithin(CACHE_WRITE)
         ):
+            _LOGGER.info("Write Prepare holding: %s", self._holding)
             self._holding = await self._gateway.async_read(UnitHolding, self._index)
             self._holding.sync(self._status, self.SYNC_PROPERTIES)
-            await self._gateway.async_write(self._holding)
+            _LOGGER.info("Write Prepare dirty: %s", self._holding.dirty)
+            await self._gateway.async_write(self._holding, self._index)
 
     async def writeCommit(self):
         """Write any dirty holding registers"""
         self._holding.sync(self._status, self.SYNC_PROPERTIES)
-        await self.gateway.async_write(self._holding)
+        _LOGGER.info("Write Commit dirty: %s", self._holding.dirty)
+        await self._gateway.async_write(self._holding, self._index)

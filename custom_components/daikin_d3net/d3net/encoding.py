@@ -50,7 +50,7 @@ class InputBase:
         if value is None or value == current:
             return current
 
-        self._register[register] += mask * (1 if value else -1)
+        self._registers[register] += mask * (1 if value else -1)
         self._dirty = True
         return value
 
@@ -107,6 +107,11 @@ class HoldingBase(InputBase):
     def dirty(self) -> bool:
         """Return the dirty state of the object."""
         return self._dirty
+
+    @property
+    def registers(self) -> list[int]:
+        """Internal register array."""
+        return self._registers
 
     def sync(self, source, properties: list[str]):
         """Copy properties in from another object"""
