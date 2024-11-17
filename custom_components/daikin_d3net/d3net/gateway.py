@@ -193,8 +193,12 @@ class D3netUnit:
             self._error = self._gateway.async_read(UnitError, self._index)
         return self._error
 
+    def filter_reset(self):
+        """Reset the filter status."""
+        self._holding.filter_reset = True
+
     async def async_update_status(self):
-        """Load unit status"""
+        """Load unit status."""
         # Don't update status if we've just written
         if self._holding is None or not self._holding.writeWithin(CACHE_WRITE):
             self._status = await self._gateway.async_read(UnitStatus, self._index)
@@ -224,3 +228,8 @@ class D3netUnit:
         self._holding.sync(self._status, self.SYNC_PROPERTIES)
         # They'll only write if there was something made dirty
         await self._gateway.async_write(self._holding, self._index)
+
+        # If we're resetting the filter, we need to clear the reset and write it again
+        if self._holding.filter_reset:
+            self._holding.filter_reset = False
+            await self._gateway.async_write(self._holding, self._index)

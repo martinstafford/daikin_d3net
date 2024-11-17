@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
+from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -21,15 +18,15 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Initialize all the Binary Sensor Entities."""
+    """Initialize all the Button Entities."""
     coordinator: D3netCoordinator = entry.runtime_data
     entities = []
     for unit in coordinator.gateway.units:
-        entities.append(D3netBinarySensorFilter(coordinator, unit))
+        entities.append(D3netButtonFilter(coordinator, unit))
     async_add_entities(entities)
 
 
-class D3netBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
+class D3netButtonBase(CoordinatorEntity, ButtonEntity):
     """Consolidation of sensor initialization."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
@@ -40,28 +37,24 @@ class D3netBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
         self._attr_device_info: DeviceInfo = coordinator.device_info(unit)
         self._attr_device_name = self._attr_device_info["name"]
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
 
-
-class D3netBinarySensorFilter(D3netBinarySensorBase):
-    """Binary Sensor object for filter cleaning alter."""
+class D3netButtonFilter(D3netButtonBase):
+    """Button object for filter cleaning reset."""
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Initialize custom properties for this sensor."""
         super().__init__(coordinator, unit)
-        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
-        self._attr_name = self._attr_device_info["name"] + " Filter Warning"
+        self._attr_device_class = ButtonDeviceClass.UPDATE
+        self._attr_name = self._attr_device_info["name"] + " Filter Reset"
         self._attr_unique_id = self._attr_name
 
     @property
-    def is_on(self) -> bool:
-        """State of the Clean Filter warning."""
-        return self._unit.status.filter_warning
-
-    @property
     def icon(self) -> str:
-        """Icon for filter warning."""
+        """Icon for filter reset."""
         return "mdi:air-filter"
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        await self._unit.async_write_prepare()
+        self._unit.filter_reset()
+        await self._unit.async_write_commit()

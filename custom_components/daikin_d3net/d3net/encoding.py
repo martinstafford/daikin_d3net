@@ -432,11 +432,11 @@ class UnitHolding(HoldingBase):
         self._encode_sint(32, 16, int(setpoint * 10))
 
     @property
-    def filter_warning(self) -> bool:
+    def filter_reset(self) -> bool:
         """Operation mode setting."""
         return self._decode_uint(20, 4) != 0
 
-    @filter_warning.setter
-    def filter_warning(self, state: bool):
+    @filter_reset.setter
+    def filter_reset(self, state: bool):
         """Reset the filter status."""
         self._encode_uint(20, 4, 15 if state else 0)
