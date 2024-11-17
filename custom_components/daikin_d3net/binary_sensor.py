@@ -7,6 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -55,6 +56,7 @@ class D3netBinarySensorFilter(D3netBinarySensorBase):
         self._attr_device_class = BinarySensorDeviceClass.PROBLEM
         self._attr_name = self._attr_device_info["name"] + " Filter Warning"
         self._attr_unique_id = self._attr_name
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool:

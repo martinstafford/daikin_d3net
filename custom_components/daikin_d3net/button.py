@@ -4,7 +4,8 @@ import logging
 
 from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -47,6 +48,7 @@ class D3netButtonFilter(D3netButtonBase):
         self._attr_device_class = ButtonDeviceClass.UPDATE
         self._attr_name = self._attr_device_info["name"] + " Filter Reset"
         self._attr_unique_id = self._attr_name
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def icon(self) -> str:
