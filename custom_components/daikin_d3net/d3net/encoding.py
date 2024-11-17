@@ -82,15 +82,17 @@ class InputBase:
         self._bit(start, value)
 
     def _encode_uint(self, start: int, length: int, value: int):
+        """Encode an unsigned int into a position in a register."""
         for bit in range(length):
             self._bit(start + bit, (value & 1 << bit) > 0)
 
     def _encode_sint(self, start: int, length: int, value: int):
+        """Encode a signed int into a position in a register."""
         self._encode_uint(start, length - 1, abs(value))
         self._encode_bit(start + length - 1, value < 0)
 
     def readWithin(self, seconds: float):
-        """The time the object was last read"""
+        """Whether the registers have been loaded from modbus withing X seconds."""
         return time.perf_counter() - self._timeRead < seconds
 
 
@@ -100,7 +102,7 @@ class HoldingBase(InputBase):
     TYPE = D3netRegisterType.Holding
 
     def __init__(self, registers) -> None:
-        """Initialization specific for Holding registers"""
+        """Specific init for Holding registers."""
         super().__init__(registers)
         self._timeWrite = None
 
@@ -115,17 +117,18 @@ class HoldingBase(InputBase):
         return self._registers
 
     def sync(self, source, properties: list[str]):
-        """Copy properties in from another object"""
-        for property in properties:
-            setattr(self, property, getattr(source, property))
+        """Copy properties in from another object."""
+        for prop in properties:
+            setattr(self, prop, getattr(source, prop))
 
     def writeWithin(self, seconds: float):
-        """The time the object was last written"""
+        """Was the object written to modbus within the last X mins."""
         if self._timeWrite is None:
             return False
         return time.perf_counter() - self._timeWrite < seconds
 
     def written(self):
+        """Update the object status to reflect that it has just been written."""
         self._timeWrite = time.perf_counter()
         self._dirty = False
 
@@ -302,7 +305,7 @@ class UnitStatus(InputBase):
 
     @property
     def filter_warning(self) -> bool:
-        """Operation mode setting."""
+        """Filter sign status."""
         return self._decode_uint(20, 4) != 0
 
     @filter_warning.setter
