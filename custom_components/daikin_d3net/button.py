@@ -53,7 +53,7 @@ class D3netButtonFilter(D3netButtonBase):
     @property
     def icon(self) -> str:
         """Icon for filter reset."""
-        return "mdi:air-filter"
+        return "mdi:vacuum"
 
     async def async_press(self) -> None:
         """Handle the button press."""
