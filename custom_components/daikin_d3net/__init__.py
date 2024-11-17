@@ -8,7 +8,7 @@ import logging
 
 from pymodbus.client import AsyncModbusTcpClient
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -42,10 +42,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     gateway = D3netGateway(
         AsyncModbusTcpClient(host=host, port=port, timeout=10), slave
     )
-    await gateway.async_setup()
-    entry.runtime_data = D3netCoordinator(hass, gateway, entry)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    return True
+    try:
+        await gateway.async_setup()
+        entry.runtime_data = D3netCoordinator(hass, gateway, entry)
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except ConnectionError as ex:
+        raise ConfigEntryNotReady(f"Unable to connect to {host}:{port}") from ex
+    else:
+        return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
