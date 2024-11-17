@@ -95,9 +95,7 @@ class D3netGateway:
                         capabilities: UnitCapability = await self._async_read(
                             UnitCapability, index
                         )
-                        status: UnitStatus = await self._async_read(
-                            UnitStatus, index
-                        )
+                        status: UnitStatus = await self._async_read(UnitStatus, index)
                         unit = D3netUnit(self, index, capabilities, status)
                         self._units.append(unit)
 
@@ -151,11 +149,14 @@ class D3netUnit:
         "fan_speed",
         "operating_mode",
         "temp_setpoint",
-        "filter_warning",
     ]
 
     def __init__(
-        self, gateway: D3netGateway, index: int, capabilities: UnitCapability, status: UnitStatus
+        self,
+        gateway: D3netGateway,
+        index: int,
+        capabilities: UnitCapability,
+        status: UnitStatus,
     ) -> None:
         """Unit Initializer."""
         self._gateway = gateway
