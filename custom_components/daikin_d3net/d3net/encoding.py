@@ -401,6 +401,7 @@ class UnitHolding(HoldingBase):
     def fan_direct(self, direct: D3netFanDirection):
         """Set the fan direction."""
         self._encode_uint(8, 3, direct.value)
+        self.fan_control = True
 
     @property
     def fan_speed(self) -> D3netFanSpeed:
@@ -411,6 +412,17 @@ class UnitHolding(HoldingBase):
     def fan_speed(self, speed: D3netFanSpeed):
         """Set the fan speed."""
         self._encode_uint(12, 3, speed.value)
+        self.fan_control = True
+
+    @property
+    def fan_control(self) -> bool:
+        """Status of fan control."""
+        return (self._decode_uint(4, 4) == 6)
+
+    @fan_control.setter
+    def fan_control(self, enabled: bool):
+        """Flag that fan control is enabled."""
+        self._encode_uint(4, 4, 6 if enabled else 0)
 
     @property
     def operating_mode(self):
@@ -419,7 +431,7 @@ class UnitHolding(HoldingBase):
 
     @operating_mode.setter
     def operating_mode(self, mode: D3netOperationMode):
-        """Set the operating mode"""
+        """Set the operating mode."""
         self._encode_uint(16, 4, mode.value)
 
     @property
