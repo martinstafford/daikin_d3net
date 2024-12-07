@@ -10,7 +10,9 @@ The Waveshare interface must be configured in Modbus TCP<=>Modbus RTU mode.
 
 ## Mounting
 
-The DTA116A51, Waveshare and power supply are mounted in a case near one of the indoor units
+I bought my DTA116A51 from AliExpress, probably used. It came with the power supply and some cables but no housing.
+
+The DTA116A51, Waveshare and power supply are mounted in a case near one of the indoor units.
 
 ![Hardware Mounting](/images/hardware.png)
 
@@ -18,7 +20,7 @@ The DTA116A51, Waveshare and power supply are mounted in a case near one of the 
 
 Daikin documentation states that
 
-- the DTA116A51 should be connected to the outdoor unit on the F1F2 to minimise outages due to the indoor bus.
+- the DTA116A51 should be connected to the outdoor unit on the outdoor F1F2 bus to minimise outages due to problems on the indoor bus.
 - the F1F2 bus should not branch, but should chain from device to device.
 
 As I have added the DTA116A51 to an existing installed system I wanted to avoid changing the system's wiring configuration. I found that I could piggyback attach the DTA116A51 to an existing indoor unit's F1F2 connection on the indoor F1F2 bus, branching it on a short cable, and the gateway and system have been performing reliably for a number of months.
