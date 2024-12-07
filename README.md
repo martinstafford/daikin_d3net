@@ -12,3 +12,15 @@ Enumerates units attached to DIII-Net bus, provides Climate entities for each.
 ## Communication Specification
 
 Communication details are based on the [Daikin Design Guide Modbus Interface DIII](https://www.daikin-ce.com/content/dam/document-library/Installer-reference-guide/ac/vrv/ekmbdxb/EKMBDXB_Design%20guide_4PEN642495-1A_English.pdf).
+
+## Screens
+
+![Integration](/images/integration.png)
+
+![Device List](/images/devices.png)
+
+![Device Details](/images/device.png)
+
+## Hardware
+
+[Example DIY hardware implementation](hardware.md)
