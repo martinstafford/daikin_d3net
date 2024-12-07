@@ -22,8 +22,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Seconds between modbus access
 THROTTLE_DELAY = 0.025
-# Seconds before we read from a unit after writing to it
-CACHE_WRITE = 5
+# Seconds before we read from a unit after writing to it.
+# This is how long we don't care what manual changes are made on the panel and we'll overwrite them.
+# The fan speed change takes a long time to poropogate back to the modbus gateway so needs to be this high.
+CACHE_WRITE = 35
 # Seconds before we reload status information
 CACHE_READ = 60
 # Seconds before we reload error information
