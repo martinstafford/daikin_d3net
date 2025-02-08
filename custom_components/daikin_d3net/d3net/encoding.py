@@ -95,6 +95,13 @@ class InputBase:
         """Whether the registers have been loaded from modbus withing X seconds."""
         return time.perf_counter() - self._timeRead < seconds
 
+    def __str__(self):
+        """Return class name and register contents."""
+        registers = ""
+        for register in self._registers:
+            registers += "{0:016b} ".format(register)
+        return type(self).__name__ + " [ " + str(registers) + "]"
+
 
 class HoldingBase(InputBase):
     """Base class for Holding Registers."""
@@ -145,8 +152,8 @@ class SystemStatus(InputBase):
         return self._decode_bit(0)
 
     @property
-    def connected(self) -> bool:
-        """Is the interface connected to other devices."""
+    def other_device_exists(self) -> bool:
+        """Are other devices connected to DIII net."""
         return self._decode_bit(1)
 
     @property
@@ -417,7 +424,7 @@ class UnitHolding(HoldingBase):
     @property
     def fan_control(self) -> bool:
         """Status of fan control."""
-        return (self._decode_uint(4, 4) == 6)
+        return self._decode_uint(4, 4) == 6
 
     @fan_control.setter
     def fan_control(self, enabled: bool):

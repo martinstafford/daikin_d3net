@@ -64,7 +64,7 @@ class D3netGateway:
         if not self._client.connected:
             result = await self._client.connect()
             if result:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Daikin Modbus connected to %s:%s",
                     self._client.comm_params.host,
                     self._client.comm_params.port,
@@ -77,7 +77,7 @@ class D3netGateway:
     async def async_close(self):
         """Disconnect modbus client."""
         async with self._lock:
-            await self._client.close()
+            self._client.close()
 
     async def async_setup(self):
         """Return a bool array of connected units."""
@@ -86,10 +86,10 @@ class D3netGateway:
             if not self._units:
                 self._units = []
                 system_decoder: SystemStatus = await self._async_read(SystemStatus)
-                _LOGGER.info(
-                    "System Connected: %s, Initialised: %s",
-                    system_decoder.connected,
+                _LOGGER.debug(
+                    "System Initialised: %s, Other Devices Exist: %s.",
                     system_decoder.initialised,
+                    system_decoder.other_device_exists,
                 )
 
                 for index, connected in enumerate(system_decoder.units_connected):
@@ -100,6 +100,11 @@ class D3netGateway:
                         status: UnitStatus = await self._async_read(UnitStatus, index)
                         unit = D3netUnit(self, index, capabilities, status)
                         self._units.append(unit)
+
+                _LOGGER.info(
+                    "Discovered %s units.",
+                    len(self._units),
+                )
 
     async def async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object."""
@@ -124,17 +129,25 @@ class D3netGateway:
                 count=Decoder.COUNT,
                 slave=self._slave,
             )
+        decoder = Decoder(response.registers)
+        _LOGGER.debug(
+            "Read %02i %s",
+            index,
+            decoder,
+        )
         await self._throttle_end()
-        return Decoder(response.registers)
+        return decoder
 
     async def async_write(self, decode: HoldingBase, index: int):
         """Write a register."""
+        _LOGGER.debug(
+            "%s %02i %s", ("Write" if decode.dirty else "Skipped write"), index, decode
+        )
         if decode.dirty:
             async with self._lock:
                 await self._async_connect()
                 await self._throttle_start()
                 address = decode.ADDRESS + index * decode.COUNT
-                _LOGGER.info("Writing %s to address %s", decode.registers, address)
                 await self._client.write_registers(
                     address=address, slave=self._slave, values=decode.registers
                 )
@@ -214,14 +227,11 @@ class D3netUnit:
             and not self._holding.writeWithin(CACHE_WRITE)
         ):
             self._holding = await self._gateway.async_read(UnitHolding, self._index)
-            reg = self._holding.registers
             self._holding.sync(self._status, self.SYNC_PROPERTIES)
             if self._holding.dirty:
                 # The holding registers are out of sync with status, so update them before making changes.
                 # This is the whole point of doing a Prepare.
-                _LOGGER.info(
-                    "Holding out of sync. Holding: %s, Status: %s ", reg, self._holding
-                )
+                _LOGGER.debug("Holding out of sync with status, performing sync write")
                 await self._gateway.async_write(self._holding, self._index)
 
     async def async_write_commit(self):

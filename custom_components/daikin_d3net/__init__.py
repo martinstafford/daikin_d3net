@@ -117,3 +117,5 @@ class D3netCoordinator(DataUpdateCoordinator):
         """Update the status of all units."""
         for unit in self._gateway.units:
             await unit.async_update_status()
+        # Close connection after each update to prevent timeouts
+        await self._gateway.async_close()

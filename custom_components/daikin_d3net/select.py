@@ -34,7 +34,8 @@ async def async_setup_entry(
     entities = []
     for unit in coordinator.gateway.units:
         entities.append(D3netSelectMode(coordinator, unit))
-        entities.append(D3netSelectFanSpeed(coordinator, unit))
+        if unit.capabilities.fan_speed_capable:
+            entities.append(D3netSelectFanSpeed(coordinator, unit))
     async_add_entities(entities)
 
 

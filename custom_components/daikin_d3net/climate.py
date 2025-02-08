@@ -85,29 +85,30 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         self._attr_name = self._attr_device_info["name"]
         self._attr_unique_id = self._attr_name
 
-        self._attr_supported_features = (
+        self._attr_supported_features: ClimateEntityFeature = (
             ClimateEntityFeature.TURN_ON
             | ClimateEntityFeature.TURN_OFF
             | ClimateEntityFeature.TARGET_TEMPERATURE
-            | ClimateEntityFeature.FAN_MODE
-            if unit.capabilities.fan_speed_capable
-            else 0 | ClimateEntityFeature.SWING_MODE
-            if unit.capabilities.fan_direct_capable
-            else 0
         )
 
-        self.hvac_modes = []
-        self.hvac_modes.append(HVACMode.OFF)
-        if unit.capabilities.cool_mode_capable:
-            self.hvac_modes.append(HVACMode.COOL)
-        if unit.capabilities.heat_mode_capable:
-            self.hvac_modes.append(HVACMode.HEAT)
-        if unit.capabilities.auto_mode_capable:
-            self.hvac_modes.append(HVACMode.AUTO)
-        if unit.capabilities.dry_mode_capable:
-            self.hvac_modes.append(HVACMode.DRY)
         if unit.capabilities.fan_mode_capable:
-            self.hvac_modes.append(HVACMode.FAN_ONLY)
+            self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
+
+        if unit.capabilities.fan_direct_capable:
+            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+
+        self._attr_hvac_modes = []
+        self._attr_hvac_modes.append(HVACMode.OFF)
+        if unit.capabilities.cool_mode_capable:
+            self._attr_hvac_modes.append(HVACMode.COOL)
+        if unit.capabilities.heat_mode_capable:
+            self._attr_hvac_modes.append(HVACMode.HEAT)
+        if unit.capabilities.auto_mode_capable:
+            self._attr_hvac_modes.append(HVACMode.AUTO)
+        if unit.capabilities.dry_mode_capable:
+            self._attr_hvac_modes.append(HVACMode.DRY)
+        if unit.capabilities.fan_mode_capable:
+            self._attr_hvac_modes.append(HVACMode.FAN_ONLY)
 
         if unit.capabilities.fan_speed_capable:
             self.fan_modes = FANSPEEDCAPABILITY_DAIKIN_HA[
