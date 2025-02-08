@@ -217,6 +217,11 @@ class D3netUnit:
         # Don't update status if we've just written
         if self._holding is None or not self._holding.writeWithin(CACHE_WRITE):
             self._status = await self._gateway.async_read(UnitStatus, self._index)
+        else:
+            _LOGGER.debug(
+                "Read %02i skipped on read-after-write delay",
+                self._index,
+            )
 
     async def async_write_prepare(self):
         """Prepare the holding registers for a write by reading them and making sure they match the current status."""
@@ -231,8 +236,16 @@ class D3netUnit:
             if self._holding.dirty:
                 # The holding registers are out of sync with status, so update them before making changes.
                 # This is the whole point of doing a Prepare.
-                _LOGGER.debug("Holding out of sync with status, performing sync write")
+                _LOGGER.debug(
+                    "Holding %02i out of sync with status, performing sync write",
+                    self._index,
+                )
                 await self._gateway.async_write(self._holding, self._index)
+        else:
+            _LOGGER.debug(
+                "Prepare %02i skipped on read-after-write delay",
+                self._index,
+            )
 
     async def async_write_commit(self):
         """Write any dirty holding registers."""
