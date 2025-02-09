@@ -31,9 +31,11 @@ OPERATION_MODE_ICONS = {
     D3netOperationMode.FAN: "mdi:fan",
     D3netOperationMode.HEAT: "mdi:fire",
     D3netOperationMode.COOL: "mdi:snowflake",
-    D3netOperationMode.DRY: "mdi:water-percent",
     D3netOperationMode.AUTO: "mdi:thermostat-auto",
     D3netOperationMode.VENT: "mdi:weather-windy",
+    D3netOperationMode.UNDEFINED: "mdi:hvac",
+    D3netOperationMode.SLAVE: "mdi:flowchart",
+    D3netOperationMode.DRY: "mdi:water-percent",
 }
 
 MODE_DAIKIN_HA = {
