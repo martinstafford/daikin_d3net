@@ -5,7 +5,7 @@ Home Assistant Daikin DIII-Net Modbus Integration.
 
 Home Assistant custom component to integrate with the Daikin DTA116A51 DIII-Net/Modbus Adapter.
 
-Developed against a VRV IV-S system, DTA116A51 and Modbus RTU/TCP gateway. Currently only supports communication over Modbus TCP. No current support for hot water functions.
+Developed against a VRV IV-S system, DTA116A51 and Modbus RTU/TCP gateway. Currently only supports communication over Modbus TCP. No current support for hot water functions. Unfortunately the DCPA01 is not supported and no documentation is available.
 
 Enumerates units attached to DIII-Net bus, provides Climate entities for each.
 
