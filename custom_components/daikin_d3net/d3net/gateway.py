@@ -5,8 +5,8 @@ import logging
 import time
 
 from pymodbus.client import ModbusBaseClient
-from pymodbus.pdu import ModbusResponse
 
+# from pymodbus.pdu import ModbusResponse
 from .const import D3netRegisterType
 from .encoding import (
     HoldingBase,
@@ -87,7 +87,7 @@ class D3netGateway:
                 self._units = []
                 system_decoder: SystemStatus = await self._async_read(SystemStatus)
                 _LOGGER.debug(
-                    "System Initialised: %s, Other Devices Exist: %s.",
+                    "System Initialised: %s, Other Devices Exist: %s",
                     system_decoder.initialised,
                     system_decoder.other_device_exists,
                 )
@@ -102,7 +102,7 @@ class D3netGateway:
                         self._units.append(unit)
 
                 _LOGGER.info(
-                    "Discovered %s units.",
+                    "Discovered %s units",
                     len(self._units),
                 )
 
@@ -115,7 +115,7 @@ class D3netGateway:
     async def _async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object. Must already hold a lock and connection."""
         await self._throttle_start()
-        response: ModbusResponse = None
+        response = None
         address = Decoder.ADDRESS + index * Decoder.COUNT
         if Decoder.TYPE == D3netRegisterType.Holding:
             response = await self._client.read_holding_registers(
@@ -173,7 +173,7 @@ class D3netUnit:
         capabilities: UnitCapability,
         status: UnitStatus,
     ) -> None:
-        """Unit Initializer."""
+        """Unit Initialize"""
         self._gateway = gateway
         self._index = index
         self._capabilities: UnitCapability = capabilities
