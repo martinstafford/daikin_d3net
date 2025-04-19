@@ -1,4 +1,6 @@
 {
     "name": "Daikin DIII-NET Modbus",
-    "content_in_root": false
+    "content_in_root": true,
+    "zip_release": true,
+    "filename": "daikin_d3net.zip"
 }
