@@ -16,12 +16,13 @@
     
           - name: Create zip
             run: |
-              zip daikin_d3net.zip -r ./custom_components
+              cd ./custom_components/daikin_d3net
+              zip daikin_d3net.zip -r ./
           - name: Upload zip to release
             uses: svenstaro/upload-release-action@v1-release
             with:
               repo_token: ${{ secrets.GITHUB_TOKEN }}
-              file: ./daikin_d3net.zip
+              file: ./custom_components/daikin_d3net/daikin_d3net.zip
               asset_name: daikin_d3net.zip
               tag: ${{ github.ref }}
               overwrite: true
