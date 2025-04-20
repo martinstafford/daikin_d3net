@@ -16,7 +16,7 @@ Install with [HACS](https://hacs.xyz), currently as a custom repository by manua
 
 OR
 
-Download the [latest release](https://github.com/martinstafford/daikin_d3net/releases) and copy the `daikin_d3net` folder into to your Home Assistant `config/custom_components` folder.
+Download the [latest release](https://github.com/martinstafford/daikin_d3net/releases) and place the content in the Home Assistant `config/custom_components/daikin_d3net` folder.
 
 After rebooting Home Assistant, this integration can be configured through the integration setup UI.
 
