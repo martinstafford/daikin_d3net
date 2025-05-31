@@ -128,13 +128,13 @@ class D3netSelectFanDirection(D3netSelectBase):
         for step in FANDIRECTIONCAPABILITY_DAIKIN_HA[
             unit.capabilities.fan_direct_steps
         ]:
-            self._attr_options.append(step.title())
+            self._attr_options.append(step.name)
         self._attr_icon = "mdi:arrow-decision"
 
     @property
     def current_option(self) -> str:
         """Current Fan Direction."""
-        return self._unit.status.fan_direct.title()
+        return self._unit.status.fan_direct.name
 
     async def async_select_option(self, option: str) -> None:
         """Change the Fan Direction."""
