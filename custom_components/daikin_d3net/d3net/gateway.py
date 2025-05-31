@@ -93,7 +93,7 @@ class D3netGateway:
                 )
 
                 for index, connected in enumerate(system_decoder.units_connected):
-                    if connected:
+                    if connected and not system_decoder.units_error[index]:
                         capabilities: UnitCapability = await self._async_read(
                             UnitCapability, index
                         )
