@@ -1,4 +1,4 @@
-"""DIIINet constants"""
+"""DIIINet constants."""
 
 from enum import Enum
 
@@ -17,6 +17,16 @@ class D3netOperationMode(Enum):
 
 
 class D3netFanSpeedCapability(Enum):
+    """Unit Fan Speed Capability."""
+
+    Fixed = 1
+    Step2 = 2
+    Step3 = 3
+    Step4 = 4
+    Step5 = 5
+
+
+class D3netFanDirectionCapability(Enum):
     """Unit Fan Speed Capability."""
 
     Fixed = 1
@@ -50,5 +60,7 @@ class D3netFanDirection(Enum):
 
 
 class D3netRegisterType(Enum):
+    """Type of Modbus resgister."""
+
     Input = "input"
     Holding = "holding"

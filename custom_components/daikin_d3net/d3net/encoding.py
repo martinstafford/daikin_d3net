@@ -5,6 +5,7 @@ import time
 
 from .const import (
     D3netFanDirection,
+    D3netFanDirectionCapability,
     D3netFanSpeed,
     D3netFanSpeedCapability,
     D3netOperationMode,
@@ -163,7 +164,7 @@ class SystemStatus(InputBase):
 
     @property
     def units_error(self):
-        """Is the interface connected to other devices."""
+        """Array of units that have communication errors."""
         return self._decode_bit_array(80, 64)
 
 
@@ -204,9 +205,9 @@ class UnitCapability(InputBase):
         return self._decode_bit(11)
 
     @property
-    def fan_direct_steps(self) -> int:
+    def fan_direct_steps(self) -> D3netFanDirectionCapability:
         """Enum of FAN DIRECTION STEPS."""
-        return self._decode_uint(8, 3)
+        return D3netFanDirectionCapability(self._decode_uint(8, 3))
 
     @property
     def fan_speed_capable(self) -> bool:

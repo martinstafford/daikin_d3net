@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .__init__ import D3netCoordinator
 from .const import (
+    FANDIRECTIONCAPABILITY_DAIKIN_HA,
     FANSPEED_DAIKIN_HA,
     FANSPEED_HA_DAIKIN,
     FANSPEEDCAPABILITY_DAIKIN_HA,
@@ -21,6 +22,7 @@ from .const import (
     MODE_TEXT_HA,
     OPERATION_MODE_ICONS,
 )
+from .d3net.const import D3netFanDirection
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,6 +38,9 @@ async def async_setup_entry(
         entities.append(D3netSelectMode(coordinator, unit))
         if unit.capabilities.fan_speed_capable:
             entities.append(D3netSelectFanSpeed(coordinator, unit))
+        if unit.capabilities.fan_direct_capable:
+            entities.append(D3netSelectFanDirection(coordinator, unit))
+
     async_add_entities(entities)
 
 
@@ -107,5 +112,33 @@ class D3netSelectFanSpeed(D3netSelectBase):
         """Change the Fan Speed."""
         await self._unit.async_write_prepare()
         self._unit.status.fan_speed = FANSPEED_HA_DAIKIN[option.lower()]
+        await self._unit.async_write_commit()
+        self.async_write_ha_state()
+
+
+class D3netSelectFanDirection(D3netSelectBase):
+    """Fan Direction Select Entity."""
+
+    def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
+        """Initialize custom properties for the Fan Direction selector."""
+        super().__init__(coordinator, unit)
+        self._attr_name = self._attr_device_info["name"] + " Fan Direction"
+        self._attr_unique_id = self._attr_name
+        self._attr_options = []
+        for step in FANDIRECTIONCAPABILITY_DAIKIN_HA[
+            unit.capabilities.fan_direct_steps
+        ]:
+            self._attr_options.append(step.title())
+        self._attr_icon = "mdi:arrow-decision"
+
+    @property
+    def current_option(self) -> str:
+        """Current Fan Direction."""
+        return self._unit.status.fan_direct.title()
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the Fan Direction."""
+        await self._unit.async_write_prepare()
+        self._unit.status.fan_direct = D3netFanDirection[option.lower()]
         await self._unit.async_write_commit()
         self.async_write_ha_state()

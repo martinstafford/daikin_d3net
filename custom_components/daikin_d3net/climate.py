@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.components.climate import (
     FAN_OFF,
+    SWING_OFF,
     ClimateEntity,
     ClimateEntityFeature,
     HVACAction,
@@ -24,6 +25,9 @@ from .const import (
     FANSPEED_HA_DAIKIN,
     FANSPEEDCAPABILITY_DAIKIN_HA,
     OPERATION_MODE_ICONS,
+    SWINGMODE_DAIKIN_HA,
+    SWINGMODE_HA_DAIKIN,
+    SWINGMODECAPABILITY_DAIKIN_HA,
 )
 from .d3net.encoding import D3netOperationMode
 from .d3net.gateway import D3netUnit
@@ -91,11 +95,17 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
             | ClimateEntityFeature.TARGET_TEMPERATURE
         )
 
-        if unit.capabilities.fan_mode_capable:
+        if unit.capabilities.fan_speed_capable:
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
+            self.fan_modes = FANSPEEDCAPABILITY_DAIKIN_HA[
+                unit.capabilities.fan_speed_steps
+            ]
 
         if unit.capabilities.fan_direct_capable:
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+            self._attr_swing_modes = SWINGMODECAPABILITY_DAIKIN_HA[
+                unit.capabilities.fan_direct_steps
+            ]
 
         self._attr_hvac_modes = []
         self._attr_hvac_modes.append(HVACMode.OFF)
@@ -109,11 +119,6 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
             self._attr_hvac_modes.append(HVACMode.DRY)
         if unit.capabilities.fan_mode_capable:
             self._attr_hvac_modes.append(HVACMode.FAN_ONLY)
-
-        if unit.capabilities.fan_speed_capable:
-            self.fan_modes = FANSPEEDCAPABILITY_DAIKIN_HA[
-                unit.capabilities.fan_speed_steps
-            ]
 
     @property
     def icon(self) -> str:
@@ -158,10 +163,17 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def fan_mode(self):
-        """Target room temperature."""
+        """The current fan mode."""
         if self._unit.status.fan:
             return FANSPEED_DAIKIN_HA[self._unit.status.fan_speed]
         return FAN_OFF
+
+    @property
+    def swing_mode(self):
+        """The current swing mode."""
+        if self._unit.status.fan:
+            return SWINGMODE_DAIKIN_HA[self._unit.status.fan_direct]
+        return SWING_OFF
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -204,5 +216,12 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         """Set new fan mode."""
         await self._unit.async_write_prepare()
         self._unit.status.fan_speed = FANSPEED_HA_DAIKIN[fan_mode]
+        await self._unit.async_write_commit()
+        self.async_write_ha_state()
+
+    async def async_set_swing_mode(self, swing_mode) -> None:
+        """Set new swing mode."""
+        await self._unit.async_write_prepare()
+        self._unit.status.fan_direct = SWINGMODE_HA_DAIKIN[swing_mode]
         await self._unit.async_write_commit()
         self.async_write_ha_state()
