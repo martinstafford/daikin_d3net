@@ -139,6 +139,6 @@ class D3netSelectFanDirection(D3netSelectBase):
     async def async_select_option(self, option: str) -> None:
         """Change the Fan Direction."""
         await self._unit.async_write_prepare()
-        self._unit.status.fan_direct = D3netFanDirection[option.lower()]
+        self._unit.status.fan_direct = D3netFanDirection[option.capitalize()]
         await self._unit.async_write_commit()
         self.async_write_ha_state()
