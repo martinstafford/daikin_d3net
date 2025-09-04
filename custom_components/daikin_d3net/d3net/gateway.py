@@ -35,9 +35,9 @@ CACHE_ERROR = 10
 class D3netGateway:
     """Daikin DIII-NET Interface Gateway."""
 
-    def __init__(self, client: ModbusBaseClient, slave: int) -> None:
+    def __init__(self, client: ModbusBaseClient, device_id: int) -> None:
         """Initialise the D3net Gateway."""
-        self._slave = slave
+        self._device_id = device_id
         self._client: ModbusBaseClient = client
         self._units: D3netUnit | None = None
         self._throttle = None
@@ -121,13 +121,13 @@ class D3netGateway:
             response = await self._client.read_holding_registers(
                 address=address,
                 count=Decoder.COUNT,
-                slave=self._slave,
+                device_id=self._device_id,
             )
         else:
             response = await self._client.read_input_registers(
                 address=address,
                 count=Decoder.COUNT,
-                slave=self._slave,
+                device_id=self._device_id,
             )
         decoder = Decoder(response.registers)
         _LOGGER.debug(
@@ -149,7 +149,7 @@ class D3netGateway:
                 await self._throttle_start()
                 address = decode.ADDRESS + index * decode.COUNT
                 await self._client.write_registers(
-                    address=address, slave=self._slave, values=decode.registers
+                    address=address, device_id=self._device_id, values=decode.registers
                 )
                 await self._throttle_end()
                 decode.written()
