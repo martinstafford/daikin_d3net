@@ -107,6 +107,15 @@ class D3netCoordinator(DataUpdateCoordinator):
         """The Coordinator's Gateway."""
         return self._gateway
 
+    def gateway_device_info(self) -> DeviceInfo:
+        """Device info for the Modbus / DIII gateway itself."""
+        return DeviceInfo(
+            manufacturer=MANUFACTURER,
+            model=MODEL,
+            name=self.name,
+            identifiers={(DOMAIN, f"{self.name}_gateway")},
+        )
+
     def device_info(self, unit: D3netUnit):
         """Return a unit based device_info block."""
         device_name = self.name + " " + unit.unit_id
@@ -115,6 +124,7 @@ class D3netCoordinator(DataUpdateCoordinator):
             model=MODEL,
             name=device_name,
             identifiers={(DOMAIN, device_name)},
+            via_device=(DOMAIN, f"{self.name}_gateway"),
         )
 
     @property
@@ -129,7 +139,10 @@ class D3netCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Update the status of all units."""
+        await self._gateway.async_update_system()
         for unit in self._gateway.units:
             await unit.async_update_status()
+            await unit.async_update_error()
+            await unit.async_update_ventilation()
         # Close connection after each update to prevent timeouts
         await self._gateway.async_close()

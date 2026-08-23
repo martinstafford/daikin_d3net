@@ -11,6 +11,18 @@ It currently supports communication over **Modbus TCP** and **Modbus RTU** over 
 
 Enumerates units attached to DIII-Net bus, provides Climate entities for each.
 
+## Features (1.8)
+
+Additions aligned with the EKMBDXB / DTA116A51 register map:
+
+- **Ventilation / HRV (VAM)** — operation mode 4 (Vent) and ventilation subtype Auto / Energy Reclaim / Bypass (`32804` / `42404`).
+- **Error codes** — ASCII codes from `33601` with a two-character message table, plus error / alarm / warning bits. Gateway-level last-error sensors aggregate the first active unit fault.
+- **Cool/heat master** — Master / Slave / Unknown (`32002` bits 15-14).
+- **Forced off, defrost, operation status** (actual fan / heating / cooling).
+- **Gateway diagnostics** — interface initialised, other DIII device present, connected unit count.
+
+Indoor climate still uses holding `42001-42003` with the documented fan-control flag of `6`. Ventilation writes go to holding `42404`.
+
 ## Installation
 Install with [HACS](https://hacs.xyz), currently as a custom repository by manually adding this repository or with the link below
 

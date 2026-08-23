@@ -1,0 +1,24 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "设备已经配置"
+        },
+        "error": {
+            "cannot_connect": "连接失败",
+            "invalid_auth": "认证无效",
+            "unknown": "未知错误"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "host": "Modbus 网关地址",
+                    "name": "大金 Modbus 实体前缀",
+                    "port": "Modbus 网关端口",
+                    "slave": "Modbus 从站 ID",
+                    "modbus_protocol": "Modbus 协议"
+                },
+                "title": "输入 DIII-Net Modbus 网关连接信息"
+            }
+        }
+    }
+}

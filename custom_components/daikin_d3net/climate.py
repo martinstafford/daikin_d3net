@@ -120,12 +120,19 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         if unit.capabilities.fan_mode_capable:
             self._attr_hvac_modes.append(HVACMode.FAN_ONLY)
 
+        # VAM / HRV units only support ventilation, which HA maps to FAN_ONLY.
+        self._hrv_only = unit.is_hrv
+        if self._hrv_only and HVACMode.FAN_ONLY not in self._attr_hvac_modes:
+            self._attr_hvac_modes.append(HVACMode.FAN_ONLY)
+
     @property
     def icon(self) -> str:
         """Icon for setpoint."""
         if not self._unit.status.power:
             return "mdi:power-standby"
-        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
+        return OPERATION_MODE_ICONS.get(
+            self._unit.status.operating_mode, "mdi:hvac"
+        )
 
     @property
     def max_temp(self) -> float:
@@ -140,16 +147,27 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """The HVAC mode that Unit is in."""
-        if self._unit.status.power:
-            return MODE_DAIKIN_HA[self._unit.status.operating_mode]
-        return HVACMode.OFF
+        if not self._unit.status.power:
+            return HVACMode.OFF
+        mode = self._unit.status.operating_mode
+        if mode == D3netOperationMode.VENT:
+            return HVACMode.FAN_ONLY
+        return MODE_DAIKIN_HA.get(mode, HVACMode.FAN_ONLY)
 
     @property
     def hvac_action(self) -> HVACAction:
         """The HVAC mode that Unit is in."""
-        if self._unit.status.power:
-            return ACTION_DAIKIN_HA[self._unit.status.operating_current]
-        return HVACAction.OFF
+        if not self._unit.status.power:
+            return HVACAction.OFF
+        if self._unit.status.defrost:
+            return HVACAction.DEFROSTING
+        if self._unit.status.operating_mode == D3netOperationMode.DRY:
+            return HVACAction.DRYING
+        if self._unit.status.operating_mode == D3netOperationMode.VENT:
+            return HVACAction.FAN
+        return ACTION_DAIKIN_HA.get(
+            self._unit.status.operating_current, HVACAction.IDLE
+        )
 
     @property
     def current_temperature(self) -> float | None:
@@ -201,7 +219,10 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
             self._unit.status.power = False
         else:
             self._unit.status.power = True
-            self._unit.status.operating_mode = MODE_HA_DAIKIN[hvac_mode]
+            if hvac_mode is HVACMode.FAN_ONLY and self._hrv_only:
+                self._unit.status.operating_mode = D3netOperationMode.VENT
+            else:
+                self._unit.status.operating_mode = MODE_HA_DAIKIN[hvac_mode]
         await self._unit.async_write_commit()
         self.async_write_ha_state()
 

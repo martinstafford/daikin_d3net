@@ -16,11 +16,14 @@ from homeassistant.components.climate import (
 )
 
 from .d3net.encoding import (
+    D3netCoolHeatMaster,
     D3netFanDirection,
     D3netFanDirectionCapability,
     D3netFanSpeed,
     D3netFanSpeedCapability,
     D3netOperationMode,
+    D3netOperationStatus,
+    D3netVentilationMode,
 )
 
 DOMAIN = "daikin_d3net"
@@ -193,4 +196,36 @@ SWINGMODE_DAIKIN_HA = {
 SWINGMODE_HA_DAIKIN = {
     SWING_ON: D3netFanDirection.Swing,
     SWING_OFF: D3netFanDirection.Stop,
+}
+
+MODE_DAIKIN_TEXT = {
+    D3netOperationMode.AUTO: "Auto",
+    D3netOperationMode.COOL: "Cool",
+    D3netOperationMode.DRY: "Dry",
+    D3netOperationMode.FAN: "Fan",
+    D3netOperationMode.HEAT: "Heat",
+    D3netOperationMode.VENT: "Vent",
+}
+
+MODE_TEXT_DAIKIN = {label: mode for mode, label in MODE_DAIKIN_TEXT.items()}
+
+VENTILATION_MODE_TEXT = {
+    D3netVentilationMode.NONE: "None",
+    D3netVentilationMode.AUTO: "Auto",
+    D3netVentilationMode.ENERGY_RECLAIM: "Energy Reclaim",
+    D3netVentilationMode.BYPASS: "Bypass",
+}
+
+VENTILATION_TEXT_MODE = {label: mode for mode, label in VENTILATION_MODE_TEXT.items()}
+
+COOL_HEAT_MASTER_TEXT = {
+    D3netCoolHeatMaster.UNKNOWN: "Unknown",
+    D3netCoolHeatMaster.SLAVE: "Slave",
+    D3netCoolHeatMaster.MASTER: "Master",
+}
+
+OPERATION_STATUS_TEXT = {
+    D3netOperationStatus.FAN: "Fan",
+    D3netOperationStatus.HEATING: "Heating",
+    D3netOperationStatus.COOLING: "Cooling",
 }

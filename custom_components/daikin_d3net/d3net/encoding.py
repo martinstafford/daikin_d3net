@@ -4,13 +4,17 @@ import logging
 import time
 
 from .const import (
+    D3netCoolHeatMaster,
     D3netFanDirection,
     D3netFanDirectionCapability,
     D3netFanSpeed,
     D3netFanSpeedCapability,
     D3netOperationMode,
+    D3netOperationStatus,
     D3netRegisterType,
+    D3netVentilationMode,
 )
+from .error_codes import lookup_error_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +48,7 @@ class InputBase:
 
         if self.COUNT is None:
             raise ValueError("Object register count not set")
-        if register > self.COUNT:
+        if register >= self.COUNT:
             raise ValueError("Reading outside of register buffer")
 
         current = self._registers[register] & mask > 0
@@ -72,11 +76,16 @@ class InputBase:
         return result
 
     def _decode_sint(self, start, length) -> int:
-        """Decode a signed int from the registers."""
+        """Decode a signed int from the registers (sign-magnitude, sign = high bit)."""
         result = self._decode_uint(start, length - 1)
-        if self._bit(start + length):
+        if self._bit(start + length - 1):
             result = 0 - result
         return result
+
+    @property
+    def registers(self) -> list[int]:
+        """Internal register array."""
+        return self._registers
 
     def _encode_bit(self, start: int, value: bool):
         """Encode a bit into a position in a register."""
@@ -167,6 +176,11 @@ class SystemStatus(InputBase):
         """Array of units that have communication errors."""
         return self._decode_bit_array(80, 64)
 
+    @property
+    def connected_count(self) -> int:
+        """Number of DIII units reported as connected."""
+        return sum(1 for connected in self.units_connected if connected)
+
 
 class UnitCapability(InputBase):
     """Decode Unit Capabilities."""
@@ -207,7 +221,11 @@ class UnitCapability(InputBase):
     @property
     def fan_direct_steps(self) -> D3netFanDirectionCapability:
         """Enum of FAN DIRECTION STEPS."""
-        return D3netFanDirectionCapability(self._decode_uint(8, 3))
+        value = self._decode_uint(8, 3)
+        try:
+            return D3netFanDirectionCapability(value)
+        except ValueError:
+            return D3netFanDirectionCapability.Fixed
 
     @property
     def fan_speed_capable(self) -> bool:
@@ -217,7 +235,11 @@ class UnitCapability(InputBase):
     @property
     def fan_speed_steps(self) -> D3netFanSpeedCapability:
         """Enum of FAN SPEED STEPS."""
-        return D3netFanSpeedCapability(self._decode_uint(12, 3))
+        value = self._decode_uint(12, 3)
+        try:
+            return D3netFanSpeedCapability(value)
+        except ValueError:
+            return D3netFanSpeedCapability.Fixed
 
     @property
     def cool_setpoint_upperlimit(self) -> int:
@@ -284,7 +306,11 @@ class UnitStatus(InputBase):
     @property
     def fan_direct(self) -> D3netFanDirection:
         """Fan Direction."""
-        return D3netFanDirection(self._decode_uint(8, 3))
+        value = self._decode_uint(8, 3)
+        try:
+            return D3netFanDirection(value)
+        except ValueError:
+            return D3netFanDirection.P0
 
     @fan_direct.setter
     def fan_direct(self, direct: D3netFanDirection):
@@ -294,7 +320,11 @@ class UnitStatus(InputBase):
     @property
     def fan_speed(self) -> D3netFanSpeed:
         """Fan Speed."""
-        return D3netFanSpeed(self._decode_uint(12, 3))
+        value = self._decode_uint(12, 3)
+        try:
+            return D3netFanSpeed(value)
+        except ValueError:
+            return D3netFanSpeed.High
 
     @fan_speed.setter
     def fan_speed(self, speed: D3netFanSpeed):
@@ -304,7 +334,11 @@ class UnitStatus(InputBase):
     @property
     def operating_mode(self):
         """Operation mode setting."""
-        return D3netOperationMode(self._decode_uint(16, 4))
+        value = self._decode_uint(16, 4)
+        try:
+            return D3netOperationMode(value)
+        except ValueError:
+            return D3netOperationMode.FAN
 
     @operating_mode.setter
     def operating_mode(self, mode: D3netOperationMode):
@@ -323,13 +357,35 @@ class UnitStatus(InputBase):
 
     @property
     def operating_current(self) -> D3netOperationMode:
-        """Operation mode setting."""
-        return D3netOperationMode(self._decode_uint(24, 4))
+        """Actual running status (fan / heating / cooling)."""
+        value = self._decode_uint(24, 4)
+        try:
+            return D3netOperationMode(value)
+        except ValueError:
+            return D3netOperationMode.FAN
+
+    @property
+    def operation_status(self) -> D3netOperationStatus:
+        """Actual running status as 0/1/2 fan/heat/cool."""
+        value = self._decode_uint(24, 4)
+        try:
+            return D3netOperationStatus(value)
+        except ValueError:
+            return D3netOperationStatus.FAN
 
     @property
     def defrost(self) -> bool:
         """Heat Status."""
         return self._decode_bit(29)
+
+    @property
+    def cool_heat_master(self) -> D3netCoolHeatMaster:
+        """Whether this indoor unit is cool/heat master."""
+        value = self._decode_uint(30, 2)
+        try:
+            return D3netCoolHeatMaster(value)
+        except ValueError:
+            return D3netCoolHeatMaster.UNKNOWN
 
     @property
     def temp_setpoint(self) -> float:
@@ -355,8 +411,26 @@ class UnitError(InputBase):
 
     @property
     def error_code(self) -> str:
-        """Unit Error Code."""
-        return chr(self._decode_uint(0, 8)) + chr(self._decode_uint(8, 8))
+        """Unit Error Code (two ASCII characters, higher then lower)."""
+        try:
+            higher = chr(self._decode_uint(8, 8))
+            lower = chr(self._decode_uint(0, 8))
+        except ValueError:
+            return ""
+        return higher + lower
+
+    @property
+    def error_code_present(self) -> bool:
+        """Whether a real error code is reported (not blank / 00)."""
+        code = self.error_code.strip()
+        return bool(code) and code != "00"
+
+    @property
+    def error_message(self) -> str | None:
+        """Human-readable description of the error code."""
+        if not self.error_code_present:
+            return None
+        return lookup_error_message(self.error_code)
 
     @property
     def error_sub_code(self) -> int:
@@ -364,17 +438,17 @@ class UnitError(InputBase):
         return self._decode_uint(16, 6)
 
     @property
-    def error(self) -> int:
+    def error(self) -> bool:
         """Unit Error State."""
         return self._decode_bit(24)
 
     @property
-    def alarm(self) -> int:
+    def alarm(self) -> bool:
         """Unit Alarm State."""
         return self._decode_bit(25)
 
     @property
-    def warning(self) -> int:
+    def warning(self) -> bool:
         """Unit Warning State."""
         return self._decode_bit(26)
 
@@ -460,3 +534,47 @@ class UnitHolding(HoldingBase):
     def filter_reset(self, state: bool):
         """Reset the filter status."""
         self._encode_uint(20, 4, 15 if state else 0)
+
+
+class UnitVentilation(InputBase):
+    """Decode HRV / leaving-water input registers 32801-32804 (PDU 2800, step 4)."""
+
+    ADDRESS = 2800
+    COUNT = 4
+
+    @property
+    def ventilation_mode(self) -> D3netVentilationMode:
+        """Ventilation operation mode (32804 bits 7-6)."""
+        value = self._decode_uint(54, 2)
+        try:
+            return D3netVentilationMode(value)
+        except ValueError:
+            return D3netVentilationMode.NONE
+
+
+class UnitVentilationHolding(HoldingBase):
+    """Holding registers 42401-42404 (PDU 2400, step 4) including ventilation mode."""
+
+    ADDRESS = 2400
+    COUNT = 4
+
+    def load_from_input(self, source: UnitVentilation) -> None:
+        """Copy input registers so unmodified fields are preserved on write."""
+        if len(source.registers) != self.COUNT:
+            raise ValueError("Ventilation input/holding register count mismatch")
+        self._registers = list(source.registers)
+        self._dirty = False
+
+    @property
+    def ventilation_mode(self) -> D3netVentilationMode:
+        """Ventilation operation mode (42404 bits 7-6)."""
+        value = self._decode_uint(54, 2)
+        try:
+            return D3netVentilationMode(value)
+        except ValueError:
+            return D3netVentilationMode.NONE
+
+    @ventilation_mode.setter
+    def ventilation_mode(self, mode: D3netVentilationMode):
+        """Set ventilation operation mode."""
+        self._encode_uint(54, 2, mode.value)

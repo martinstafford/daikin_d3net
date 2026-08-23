@@ -64,3 +64,28 @@ class D3netRegisterType(Enum):
 
     Input = "input"
     Holding = "holding"
+
+
+class D3netVentilationMode(Enum):
+    """HRV / VAM ventilation operation mode (input 32804 / holding 42404 bits 7-6)."""
+
+    NONE = 0
+    AUTO = 1
+    ENERGY_RECLAIM = 2
+    BYPASS = 3
+
+
+class D3netCoolHeatMaster(Enum):
+    """Cool/heat master status of an indoor unit."""
+
+    UNKNOWN = 0
+    SLAVE = 1
+    MASTER = 2
+
+
+class D3netOperationStatus(Enum):
+    """Actual running status (input 32002 bits 11-8)."""
+
+    FAN = 0
+    HEATING = 1
+    COOLING = 2

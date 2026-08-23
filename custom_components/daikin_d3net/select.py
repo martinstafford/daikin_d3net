@@ -16,13 +16,13 @@ from .const import (
     FANSPEED_DAIKIN_HA,
     FANSPEED_HA_DAIKIN,
     FANSPEEDCAPABILITY_DAIKIN_HA,
-    MODE_DAIKIN_HA,
-    MODE_HA_DAIKIN,
-    MODE_HA_TEXT,
-    MODE_TEXT_HA,
+    MODE_DAIKIN_TEXT,
+    MODE_TEXT_DAIKIN,
     OPERATION_MODE_ICONS,
+    VENTILATION_MODE_TEXT,
+    VENTILATION_TEXT_MODE,
 )
-from .d3net.const import D3netFanDirection
+from .d3net.const import D3netFanDirection, D3netVentilationMode
 from .d3net.gateway import D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +40,8 @@ async def async_setup_entry(
             entities.append(D3netSelectFanSpeed(coordinator, unit))
         if unit.capabilities.fan_direct_capable:
             entities.append(D3netSelectFanDirection(coordinator, unit))
+        if unit.is_hrv:
+            entities.append(D3netSelectVentilation(coordinator, unit))
 
     async_add_entities(entities)
 
@@ -69,22 +71,26 @@ class D3netSelectMode(D3netSelectBase):
         super().__init__(coordinator, unit)
         self._attr_name = self._attr_device_info["name"] + " Mode"
         self._attr_unique_id = self._attr_name
-        self._attr_options = [MODE_HA_TEXT[name] for name in MODE_HA_TEXT]
+        self._attr_options = list(MODE_DAIKIN_TEXT.values())
+        if not unit.is_hrv and MODE_DAIKIN_TEXT.get(unit.status.operating_mode) != "Vent":
+            self._attr_options = [opt for opt in self._attr_options if opt != "Vent"]
 
     @property
     def current_option(self) -> str:
         """Current Operating Mode."""
-        return MODE_HA_TEXT[MODE_DAIKIN_HA[self._unit.status.operating_mode]]
+        return MODE_DAIKIN_TEXT.get(self._unit.status.operating_mode, "Fan")
 
     @property
     def icon(self) -> str:
         """Icon for Operating Mode."""
-        return OPERATION_MODE_ICONS[self._unit.status.operating_mode]
+        return OPERATION_MODE_ICONS.get(
+            self._unit.status.operating_mode, "mdi:hvac"
+        )
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected Mode."""
         await self._unit.async_write_prepare()
-        self._unit.status.operating_mode = MODE_HA_DAIKIN[MODE_TEXT_HA[option]]
+        self._unit.status.operating_mode = MODE_TEXT_DAIKIN[option]
         await self._unit.async_write_commit()
         self.async_write_ha_state()
 
@@ -141,4 +147,35 @@ class D3netSelectFanDirection(D3netSelectBase):
         await self._unit.async_write_prepare()
         self._unit.status.fan_direct = D3netFanDirection[option.capitalize()]
         await self._unit.async_write_commit()
+        self.async_write_ha_state()
+
+
+class D3netSelectVentilation(D3netSelectBase):
+    """HRV ventilation operation mode (Auto / Energy Reclaim / Bypass)."""
+
+    def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
+        """Initialize the ventilation mode selector."""
+        super().__init__(coordinator, unit)
+        self._attr_name = self._attr_device_info["name"] + " Ventilation Mode"
+        self._attr_unique_id = self._attr_name
+        self._attr_options = [
+            VENTILATION_MODE_TEXT[D3netVentilationMode.AUTO],
+            VENTILATION_MODE_TEXT[D3netVentilationMode.ENERGY_RECLAIM],
+            VENTILATION_MODE_TEXT[D3netVentilationMode.BYPASS],
+        ]
+        self._attr_icon = "mdi:air-filter"
+
+    @property
+    def current_option(self) -> str | None:
+        """Current ventilation operation mode."""
+        if self._unit.ventilation is None:
+            return None
+        mode = self._unit.ventilation.ventilation_mode
+        if mode == D3netVentilationMode.NONE:
+            return None
+        return VENTILATION_MODE_TEXT[mode]
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the ventilation operation mode."""
+        await self._unit.async_write_ventilation(VENTILATION_TEXT_MODE[option])
         self.async_write_ha_state()
