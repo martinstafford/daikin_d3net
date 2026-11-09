@@ -11,9 +11,9 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
-    UnitOfTemperature,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -77,7 +77,7 @@ ACTION_DAIKIN_HA = {
 class D3netClimate(CoordinatorEntity, ClimateEntity):
     """Daikin Modbus Climate Entity."""
 
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, coordinator: D3netCoordinator, unit: D3netUnit) -> None:
         """Daikin Modbus Climate Entity Initialization."""
@@ -152,12 +152,12 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         return HVACAction.OFF
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Current room temperature."""
         return self._unit.status.temp_current
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Target room temperature."""
         return self._unit.status.temp_setpoint
 
