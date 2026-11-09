@@ -39,6 +39,14 @@ DEFAULT_SLAVE = 1
 
 UPDATE_INTERVAL = 10
 
+# Seconds pymodbus waits for a connection, and for the response to each request.
+MODBUS_TIMEOUT = 10
+# Retries pymodbus makes per request before giving up. Worst case time for a
+# single request is MODBUS_TIMEOUT * (MODBUS_RETRIES + 1), so this is kept low:
+# one retry absorbs a transient RTU frame desync without stalling a poll.
+# pymodbus defaults to 3, which would be 40 seconds for one unresponsive unit.
+MODBUS_RETRIES = 1
+
 OPERATION_MODE_ICONS = {
     D3netOperationMode.FAN: "mdi:fan",
     D3netOperationMode.HEAT: "mdi:fire",

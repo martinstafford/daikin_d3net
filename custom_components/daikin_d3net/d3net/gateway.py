@@ -1,10 +1,12 @@
 """Daikin DIII-NET Interface Gateway."""
 
 import asyncio
+from collections.abc import Callable
 import logging
 import time
 
 from pymodbus.client import ModbusBaseClient
+from pymodbus.exceptions import ModbusException
 
 # from pymodbus.pdu import ModbusResponse
 from .const import D3netRegisterType
@@ -30,15 +32,31 @@ CACHE_WRITE = 35
 CACHE_READ = 60
 # Seconds before we reload error information
 CACHE_ERROR = 10
+# Seconds allowed for a complete poll of every unit.
+# pymodbus bounds each individual request at MODBUS_TIMEOUT * (MODBUS_RETRIES + 1),
+# but a gateway that accepts a connection and then never answers would stall a
+# poll for that long *per unit* - minutes on a large install. Capping the whole
+# poll keeps entity availability responsive.
+UPDATE_TIMEOUT = 30
+# Seconds allowed for unit discovery, which reads two registers per connected unit.
+SETUP_TIMEOUT = 90
 
 
 class D3netGateway:
     """Daikin DIII-NET Interface Gateway."""
 
-    def __init__(self, client: ModbusBaseClient, device_id: int) -> None:
-        """Initialise the D3net Gateway."""
+    def __init__(
+        self, client_factory: Callable[[], ModbusBaseClient], device_id: int
+    ) -> None:
+        """Initialise the D3net Gateway.
+
+        client_factory is called to build a modbus client. A new client is built
+        whenever the previous one has been discarded after a communications
+        failure, so that a restarted gateway is picked up on the next poll.
+        """
         self._device_id = device_id
-        self._client: ModbusBaseClient = client
+        self._client_factory = client_factory
+        self._client: ModbusBaseClient | None = None
         self._units: D3netUnit | None = None
         self._throttle = None
         self._lock = asyncio.Lock()
@@ -47,6 +65,11 @@ class D3netGateway:
     def units(self):
         """Return the Units."""
         return self._units
+
+    @property
+    def connected(self) -> bool:
+        """Whether we currently hold a connection to the gateway."""
+        return self._client is not None and self._client.connected
 
     async def _throttle_start(self):
         """Check if we need to delay and sleep."""
@@ -59,53 +82,102 @@ class D3netGateway:
         """Register the time that we finished the last operation."""
         self._throttle = time.perf_counter()
 
+    def _discard_client(self):
+        """Throw away the current client after a failure.
+
+        The next connection attempt then starts from a clean client, which is
+        what allows us to recover from the remote gateway being restarted.
+        """
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:  # noqa: BLE001 - closing must never mask the original error
+                _LOGGER.debug("Daikin Modbus error while closing", exc_info=True)
+            self._client = None
+
     async def _async_connect(self):
         """Connect modbus client."""
-        if not self._client.connected:
+        if self._client is None:
+            self._client = self._client_factory()
+        if self._client.connected:
+            return
+
+        host = self._client.comm_params.host
+        port = self._client.comm_params.port
+        try:
             result = await self._client.connect()
-            if result:
-                _LOGGER.debug(
-                    "Daikin Modbus connected to %s:%s",
-                    self._client.comm_params.host,
-                    self._client.comm_params.port,
-                )
-            else:
-                _LOGGER.error("Daikin Modbus unable to connect")
-                raise ConnectionError(
-                    f"Daikin Modbus unable to connect to {self._client.comm_params.host}:{self._client.comm_params.port}"
-                )
+        except (ModbusException, OSError, asyncio.TimeoutError) as ex:
+            self._discard_client()
+            _LOGGER.debug("Daikin Modbus unable to connect to %s:%s", host, port)
+            raise ConnectionError(
+                f"Daikin Modbus unable to connect to {host}:{port}: {ex}"
+            ) from ex
+
+        if not result:
+            self._discard_client()
+            _LOGGER.debug("Daikin Modbus unable to connect to %s:%s", host, port)
+            raise ConnectionError(f"Daikin Modbus unable to connect to {host}:{port}")
+
+        _LOGGER.debug("Daikin Modbus connected to %s:%s", host, port)
 
     async def async_close(self):
         """Disconnect modbus client."""
         async with self._lock:
-            self._client.close()
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except (ModbusException, OSError) as ex:
+                    # Closing runs in a finally block, so a failure here must
+                    # never replace the error that caused the close.
+                    _LOGGER.debug("Daikin Modbus error while closing: %s", ex)
+                    self._client = None
+
+    async def async_disconnect(self):
+        """Force the connection closed and discard the client.
+
+        Used when an operation was cancelled part way through, which leaves the
+        client's transaction state unknown and the connection untrustworthy.
+        """
+        async with self._lock:
+            self._discard_client()
 
     async def async_setup(self):
         """Return a bool array of connected units."""
         async with self._lock:
-            await self._async_connect()
-            if not self._units:
-                self._units = []
-                system_decoder: SystemStatus = await self._async_read(SystemStatus)
-                _LOGGER.debug(
-                    "System Initialised: %s, Other Devices Exist: %s",
-                    system_decoder.initialised,
-                    system_decoder.other_device_exists,
-                )
+            try:
+                async with asyncio.timeout(SETUP_TIMEOUT):
+                    await self._async_setup()
+            except TimeoutError as ex:
+                self._discard_client()
+                raise ConnectionError(
+                    f"Daikin Modbus discovery timed out after {SETUP_TIMEOUT} seconds"
+                ) from ex
 
-                for index, connected in enumerate(system_decoder.units_connected):
-                    if connected and not system_decoder.units_error[index]:
-                        capabilities: UnitCapability = await self._async_read(
-                            UnitCapability, index
-                        )
-                        status: UnitStatus = await self._async_read(UnitStatus, index)
-                        unit = D3netUnit(self, index, capabilities, status)
-                        self._units.append(unit)
+    async def _async_setup(self):
+        """Discover units. Must already hold the lock."""
+        await self._async_connect()
+        if not self._units:
+            self._units = []
+            system_decoder: SystemStatus = await self._async_read(SystemStatus)
+            _LOGGER.debug(
+                "System Initialised: %s, Other Devices Exist: %s",
+                system_decoder.initialised,
+                system_decoder.other_device_exists,
+            )
 
-                _LOGGER.info(
-                    "Discovered %s units",
-                    len(self._units),
-                )
+            for index, connected in enumerate(system_decoder.units_connected):
+                if connected and not system_decoder.units_error[index]:
+                    capabilities: UnitCapability = await self._async_read(
+                        UnitCapability, index
+                    )
+                    status: UnitStatus = await self._async_read(UnitStatus, index)
+                    unit = D3netUnit(self, index, capabilities, status)
+                    self._units.append(unit)
+
+            _LOGGER.info(
+                "Discovered %s units",
+                len(self._units),
+            )
 
     async def async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object."""
@@ -116,20 +188,32 @@ class D3netGateway:
     async def _async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
         """Load registers and return a decode object. Must already hold a lock and connection."""
         await self._throttle_start()
-        response = None
         address = Decoder.ADDRESS + index * Decoder.COUNT
-        if Decoder.TYPE == D3netRegisterType.Holding:
-            response = await self._client.read_holding_registers(
-                address=address,
-                count=Decoder.COUNT,
-                device_id=self._device_id,
+        try:
+            if Decoder.TYPE == D3netRegisterType.Holding:
+                response = await self._client.read_holding_registers(
+                    address=address,
+                    count=Decoder.COUNT,
+                    device_id=self._device_id,
+                )
+            else:
+                response = await self._client.read_input_registers(
+                    address=address,
+                    count=Decoder.COUNT,
+                    device_id=self._device_id,
+                )
+        except (ModbusException, OSError, asyncio.TimeoutError) as ex:
+            self._discard_client()
+            raise ConnectionError(
+                f"Daikin Modbus read of address {address} failed: {ex}"
+            ) from ex
+
+        if response.isError():
+            self._discard_client()
+            raise ConnectionError(
+                f"Daikin Modbus read of address {address} returned an error: {response}"
             )
-        else:
-            response = await self._client.read_input_registers(
-                address=address,
-                count=Decoder.COUNT,
-                device_id=self._device_id,
-            )
+
         decoder = Decoder(response.registers)
         _LOGGER.debug(
             "Read %02i %s",
@@ -149,9 +233,24 @@ class D3netGateway:
                 await self._async_connect()
                 await self._throttle_start()
                 address = decode.ADDRESS + index * decode.COUNT
-                await self._client.write_registers(
-                    address=address, device_id=self._device_id, values=decode.registers
-                )
+                try:
+                    response = await self._client.write_registers(
+                        address=address,
+                        device_id=self._device_id,
+                        values=decode.registers,
+                    )
+                except (ModbusException, OSError, asyncio.TimeoutError) as ex:
+                    self._discard_client()
+                    raise ConnectionError(
+                        f"Daikin Modbus write of address {address} failed: {ex}"
+                    ) from ex
+
+                if response.isError():
+                    self._discard_client()
+                    raise ConnectionError(
+                        f"Daikin Modbus write of address {address} returned an error: {response}"
+                    )
+
                 await self._throttle_end()
                 decode.written()
 

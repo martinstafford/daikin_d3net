@@ -7,25 +7,28 @@ from datetime import timedelta
 import logging
 
 from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.exceptions import ModbusException
 from pymodbus.framer import FramerType as ModbusFramer
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     CONF_PROTOCOL,
     CONF_SLAVE,
     DOMAIN,
     MANUFACTURER,
+    MODBUS_RETRIES,
+    MODBUS_TIMEOUT,
     MODEL,
     PROTOCOL_RTU_OVER_TCP,
     PROTOCOL_TCP,
     UPDATE_INTERVAL,
 )
-from .d3net.gateway import D3netGateway, D3netUnit
+from .d3net.gateway import UPDATE_TIMEOUT, D3netGateway, D3netUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,12 +54,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Setup %s.%s", DOMAIN, name)
 
-    if protocol == PROTOCOL_RTU_OVER_TCP:
-        client = AsyncModbusTcpClient(host=host, port=port, timeout=10, framer=ModbusFramer.RTU)
-    else:
-        client = AsyncModbusTcpClient(host=host, port=port, timeout=10)
+    def client_factory() -> AsyncModbusTcpClient:
+        """Build a fresh modbus client.
 
-    gateway = D3netGateway(client, slave)
+        The gateway calls this again whenever it has discarded a client after a
+        communications failure, so a restarted modbus gateway is picked up on
+        the next poll without reloading the config entry.
+        """
+        if protocol == PROTOCOL_RTU_OVER_TCP:
+            return AsyncModbusTcpClient(
+                host=host,
+                port=port,
+                timeout=MODBUS_TIMEOUT,
+                retries=MODBUS_RETRIES,
+                framer=ModbusFramer.RTU,
+            )
+        return AsyncModbusTcpClient(
+            host=host,
+            port=port,
+            timeout=MODBUS_TIMEOUT,
+            retries=MODBUS_RETRIES,
+        )
+
+    gateway = D3netGateway(client_factory, slave)
     try:
         await gateway.async_setup()
         entry.runtime_data = D3netCoordinator(hass, gateway, entry)
@@ -129,7 +149,21 @@ class D3netCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Update the status of all units."""
-        for unit in self._gateway.units:
-            await unit.async_update_status()
-        # Close connection after each update to prevent timeouts
-        await self._gateway.async_close()
+        try:
+            async with asyncio.timeout(UPDATE_TIMEOUT):
+                for unit in self._gateway.units:
+                    await unit.async_update_status()
+        except TimeoutError as ex:
+            # Cancelled mid request, so the connection state is unknown.
+            # Drop it rather than reusing it on the next poll.
+            await self._gateway.async_disconnect()
+            raise UpdateFailed(
+                f"Timed out after {UPDATE_TIMEOUT} seconds polling the Daikin gateway"
+            ) from ex
+        except (ConnectionError, ModbusException) as ex:
+            # A single clean warning and an automatic retry on the next poll.
+            # Entities go unavailable until a poll reconnects successfully.
+            raise UpdateFailed(f"Error communicating with Daikin gateway: {ex}") from ex
+        finally:
+            # Close connection after each update to prevent timeouts
+            await self._gateway.async_close()
