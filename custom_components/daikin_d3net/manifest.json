@@ -1,6 +1,7 @@
 {
   "domain": "daikin_d3net",
   "name": "Daikin DIII-NET Modbus",
+  "categories": [ "climate.heat_pumps_air_conditioning" ],
   "codeowners": [ "@martinstafford" ],
   "config_flow": true,
   "documentation": "https://github.com/martinstafford/daikin_d3net",
