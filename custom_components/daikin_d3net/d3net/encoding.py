@@ -44,7 +44,7 @@ class InputBase:
 
         if self.COUNT is None:
             raise ValueError("Object register count not set")
-        if register > self.COUNT:
+        if register >= self.COUNT:
             raise ValueError("Reading outside of register buffer")
 
         current = self._registers[register] & mask > 0
@@ -72,10 +72,14 @@ class InputBase:
         return result
 
     def _decode_sint(self, start, length) -> int:
-        """Decode a signed int from the registers."""
-        result = self._decode_uint(start, length - 1)
-        if self._bit(start + length):
-            result = 0 - result
+        """Decode a two's complement signed int from the registers.
+
+        The DTA116A51 spec (CB13A033 section 5) gives every signed field its
+        sign in the field's top bit, and 8 bit fields a range of -128 to 127.
+        """
+        result = self._decode_uint(start, length)
+        if result & (1 << (length - 1)):
+            result -= 1 << length
         return result
 
     def _encode_bit(self, start: int, value: bool):
@@ -88,9 +92,8 @@ class InputBase:
             self._bit(start + bit, (value & 1 << bit) > 0)
 
     def _encode_sint(self, start: int, length: int, value: int):
-        """Encode a signed int into a position in a register."""
-        self._encode_uint(start, length - 1, abs(value))
-        self._encode_bit(start + length - 1, value < 0)
+        """Encode a two's complement signed int into a position in a register."""
+        self._encode_uint(start, length, value & ((1 << length) - 1))
 
     def readWithin(self, seconds: float):
         """Whether the registers have been loaded from modbus withing X seconds."""
