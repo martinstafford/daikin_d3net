@@ -40,6 +40,12 @@ CACHE_ERROR = 10
 UPDATE_TIMEOUT = 30
 # Seconds allowed for unit discovery, which reads two registers per connected unit.
 SETUP_TIMEOUT = 90
+# Minimum seconds between writes to the same unit's holding registers.
+# The DTA116A51 spec (CB13A033 p31) requires writes to the same register to be
+# at least 0.5 s apart. The interface only sends a command when a holding value
+# changes, and appears to sample the registers rather than react to each write,
+# so two writes closer together than this can be seen as no change at all.
+WRITE_INTERVAL = 1.0
 
 
 class D3netGateway:
@@ -60,6 +66,8 @@ class D3netGateway:
         self._units: D3netUnit | None = None
         self._throttle = None
         self._lock = asyncio.Lock()
+        # perf_counter() time of the last write to each unit index.
+        self._last_write: dict[int, float] = {}
 
     @property
     def units(self):
@@ -229,6 +237,14 @@ class D3netGateway:
             "%s %02i %s", ("Write" if decode.dirty else "Skipped write"), index, decode
         )
         if decode.dirty:
+            # Space out writes to the same unit. Wait before taking the lock so
+            # writes to other units aren't held up.
+            last = self._last_write.get(index)
+            if last is not None:
+                wait = WRITE_INTERVAL - (time.perf_counter() - last)
+                if wait > 0:
+                    _LOGGER.debug("Write %02i waiting %.2f s", index, wait)
+                    await asyncio.sleep(wait)
             async with self._lock:
                 await self._async_connect()
                 await self._throttle_start()
@@ -252,6 +268,7 @@ class D3netGateway:
                     )
 
                 await self._throttle_end()
+                self._last_write[index] = time.perf_counter()
                 decode.written()
 
 
