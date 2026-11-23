@@ -223,8 +223,14 @@ class D3netGateway:
         await self._throttle_end()
         return decoder
 
-    async def async_write(self, decode: HoldingBase, index: int):
-        """Write a register."""
+    async def async_write(
+        self, decode: HoldingBase, index: int, timestamp: bool = True
+    ):
+        """Write a register.
+
+        timestamp=False marks a write that only copies the unit's current
+        state into the holding registers (see D3netUnit.async_sync_holding).
+        """
         _LOGGER.debug(
             "%s %02i %s", ("Write" if decode.dirty else "Skipped write"), index, decode
         )
@@ -252,7 +258,7 @@ class D3netGateway:
                     )
 
                 await self._throttle_end()
-                decode.written()
+                decode.written(timestamp)
 
 
 class D3netUnit:
@@ -317,11 +323,50 @@ class D3netUnit:
         # Don't update status if we've just written
         if self._holding is None or not self._holding.writeWithin(CACHE_WRITE):
             self._status = await self._gateway.async_read(UnitStatus, self._index)
+            await self.async_sync_holding()
         else:
             _LOGGER.debug(
                 "Read %02i skipped on read-after-write delay",
                 self._index,
             )
+
+    async def async_sync_holding(self):
+        """Copy the unit's status into the holding registers if they differ.
+
+        The DTA116A51 only sends a command to a unit when a holding register
+        value changes, and changes made elsewhere (wall controllers, central
+        controllers, timers) don't update the holding registers. The spec
+        (CB13A033 p13) says the BMS must copy status into holding whenever it
+        reads status, "otherwise an operation from the HA system will be
+        ignored". Keeping them in sync here means every later command is a
+        real change, so async_write_prepare() has nothing to sync.
+
+        Only called after a status read, which never happens within
+        CACHE_WRITE of a command, so this can't undo a command the unit
+        hasn't reported yet.
+        """
+        try:
+            if self._holding is None:
+                # Read once. After that only this integration writes them.
+                self._holding = await self._gateway.async_read(UnitHolding, self._index)
+            if self._holding.dirty or not self._holding.differs(
+                self._status, self.SYNC_PROPERTIES
+            ):
+                return
+            _LOGGER.debug(
+                "Holding %02i out of sync with status, syncing", self._index
+            )
+            self._holding.sync(self._status, self.SYNC_PROPERTIES)
+            # This copies the unit's own state, so status won't lag behind it:
+            # don't start the read-after-write delay.
+            await self._gateway.async_write(
+                self._holding, self._index, timestamp=False
+            )
+        except ConnectionError as ex:
+            # Status was read fine; drop the cache so the next poll or command
+            # reads the holding registers again.
+            self._holding = None
+            _LOGGER.debug("Holding %02i sync failed: %s", self._index, ex)
 
     async def async_write_prepare(self):
         """Prepare the holding registers for a write by reading them and making sure they match the current status."""

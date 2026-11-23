@@ -129,15 +129,26 @@ class HoldingBase(InputBase):
         for prop in properties:
             setattr(self, prop, getattr(source, prop))
 
+    def differs(self, source, properties: list[str]) -> bool:
+        """Whether sync() from source would change any register, without changing this object."""
+        probe = type(self)(list(self._registers))
+        probe.sync(source, properties)
+        return probe.dirty
+
     def writeWithin(self, seconds: float):
         """Was the object written to modbus within the last X mins."""
         if self._timeWrite is None:
             return False
         return time.perf_counter() - self._timeWrite < seconds
 
-    def written(self):
-        """Update the object status to reflect that it has just been written."""
-        self._timeWrite = time.perf_counter()
+    def written(self, timestamp: bool = True):
+        """Update the object status to reflect that it has just been written.
+
+        Pass timestamp=False for a write that only copies the unit's current
+        state, so it doesn't start the read-after-write delay.
+        """
+        if timestamp:
+            self._timeWrite = time.perf_counter()
         self._dirty = False
 
 
