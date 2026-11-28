@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     FAN_OFF,
     SWING_OFF,
     ClimateEntity,
@@ -13,7 +14,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -194,21 +195,29 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         await self._unit.async_write_commit()
         self.async_write_ha_state()
 
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set the HVAC mode."""
-        await self._unit.async_write_prepare()
-        if hvac_mode is HVACMode.OFF:
+    def _apply_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set power and operating mode on the unit status for an HVAC mode."""
+        if hvac_mode == HVACMode.OFF:
             self._unit.status.power = False
         else:
             self._unit.status.power = True
             self._unit.status.operating_mode = MODE_HA_DAIKIN[hvac_mode]
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set the HVAC mode."""
+        await self._unit.async_write_prepare()
+        self._apply_hvac_mode(hvac_mode)
         await self._unit.async_write_commit()
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs) -> None:
-        """Set new target temperature."""
+        """Set new target temperature, and the HVAC mode if one is given."""
         await self._unit.async_write_prepare()
-        self._unit.status.temp_setpoint = kwargs["temperature"]
+        # climate.set_temperature passes hvac_mode through for the entity to apply
+        if (hvac_mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            self._apply_hvac_mode(hvac_mode)
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            self._unit.status.temp_setpoint = temperature
         await self._unit.async_write_commit()
         self.async_write_ha_state()
 
