@@ -40,6 +40,18 @@ CACHE_ERROR = 10
 UPDATE_TIMEOUT = 30
 # Seconds allowed for unit discovery, which reads two registers per connected unit.
 SETUP_TIMEOUT = 90
+# Attempts for a request that the gateway answers with an error or a malformed
+# response. These come back at once, so repeating them costs little of the poll
+# time. A request that gets no answer at all is not repeated here: pymodbus has
+# already retried it and the connection is treated as lost.
+REQUEST_ATTEMPTS = 3
+# Seconds to wait before repeating a request
+REQUEST_RETRY_DELAY = 0.5
+
+# Modbus function codes of the responses we expect
+FC_READ_HOLDING = 3
+FC_READ_INPUT = 4
+FC_WRITE_REGISTERS = 16
 
 
 class D3netGateway:
@@ -185,42 +197,83 @@ class D3netGateway:
             await self._async_connect()
             return await self._async_read(Decoder, index)
 
-    async def _async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
-        """Load registers and return a decode object. Must already hold a lock and connection."""
-        await self._throttle_start()
-        address = Decoder.ADDRESS + index * Decoder.COUNT
-        try:
-            if Decoder.TYPE == D3netRegisterType.Holding:
-                response = await self._client.read_holding_registers(
-                    address=address,
-                    count=Decoder.COUNT,
-                    device_id=self._device_id,
+    async def _async_request(
+        self, description: str, request, function_code: int, count: int | None = None
+    ):
+        """Send a modbus request and return its response. Must already hold the lock.
+
+        The gateway occasionally answers a good request with a modbus error, or
+        with a response that isn't for the request that was sent. Those are
+        repeated on a fresh connection before giving up with a ConnectionError.
+        count is the number of registers a read must return.
+        """
+        problem = None
+        for attempt in range(1, REQUEST_ATTEMPTS + 1):
+            if attempt > 1:
+                _LOGGER.warning(
+                    "Daikin Modbus %s %s, retrying (attempt %s of %s)",
+                    description,
+                    problem,
+                    attempt,
+                    REQUEST_ATTEMPTS,
+                )
+                await asyncio.sleep(REQUEST_RETRY_DELAY)
+            await self._async_connect()
+            await self._throttle_start()
+            try:
+                response = await request()
+            except (ModbusException, OSError, asyncio.TimeoutError) as ex:
+                self._discard_client()
+                raise ConnectionError(
+                    f"Daikin Modbus {description} failed: {ex}"
+                ) from ex
+            await self._throttle_end()
+
+            if response.isError():
+                problem = f"returned an error: {response}"
+            elif response.function_code != function_code:
+                # The full response is only worth reading at debug level
+                _LOGGER.debug("Unexpected response to %s: %s", description, response)
+                problem = f"returned an unexpected {type(response).__name__}"
+            elif count is not None and len(response.registers) != count:
+                problem = (
+                    f"returned {len(response.registers)} registers instead of {count}"
                 )
             else:
-                response = await self._client.read_input_registers(
-                    address=address,
-                    count=Decoder.COUNT,
-                    device_id=self._device_id,
-                )
-        except (ModbusException, OSError, asyncio.TimeoutError) as ex:
+                return response
+            # Don't trust the connection after a bad response
             self._discard_client()
-            raise ConnectionError(
-                f"Daikin Modbus read of address {address} failed: {ex}"
-            ) from ex
 
-        if response.isError():
-            self._discard_client()
-            raise ConnectionError(
-                f"Daikin Modbus read of address {address} returned an error: {response}"
+        raise ConnectionError(f"Daikin Modbus {description} {problem}")
+
+    async def _async_read(self, Decoder: type[InputBase], index: int = 0) -> InputBase:
+        """Load registers and return a decode object. Must already hold a lock and connection."""
+        address = Decoder.ADDRESS + index * Decoder.COUNT
+        holding = Decoder.TYPE == D3netRegisterType.Holding
+
+        def request():
+            # Looked up on each attempt as a retry replaces the client
+            read = (
+                self._client.read_holding_registers
+                if holding
+                else self._client.read_input_registers
+            )
+            return read(
+                address=address, count=Decoder.COUNT, device_id=self._device_id
             )
 
+        response = await self._async_request(
+            f"read of address {address}",
+            request,
+            FC_READ_HOLDING if holding else FC_READ_INPUT,
+            Decoder.COUNT,
+        )
         decoder = Decoder(response.registers)
         _LOGGER.debug(
             "Read %02i %s",
             index,
             decoder,
         )
-        await self._throttle_end()
         return decoder
 
     async def async_write(self, decode: HoldingBase, index: int):
@@ -230,28 +283,16 @@ class D3netGateway:
         )
         if decode.dirty:
             async with self._lock:
-                await self._async_connect()
-                await self._throttle_start()
                 address = decode.ADDRESS + index * decode.COUNT
-                try:
-                    response = await self._client.write_registers(
+                await self._async_request(
+                    f"write of address {address}",
+                    lambda: self._client.write_registers(
                         address=address,
                         device_id=self._device_id,
                         values=decode.registers,
-                    )
-                except (ModbusException, OSError, asyncio.TimeoutError) as ex:
-                    self._discard_client()
-                    raise ConnectionError(
-                        f"Daikin Modbus write of address {address} failed: {ex}"
-                    ) from ex
-
-                if response.isError():
-                    self._discard_client()
-                    raise ConnectionError(
-                        f"Daikin Modbus write of address {address} returned an error: {response}"
-                    )
-
-                await self._throttle_end()
+                    ),
+                    FC_WRITE_REGISTERS,
+                )
                 decode.written()
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     FAN_OFF,
     SWING_OFF,
     ClimateEntity,
@@ -13,8 +14,9 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -180,48 +182,63 @@ class D3netClimate(CoordinatorEntity, ClimateEntity):
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
 
+    async def _async_write(self, write) -> None:
+        """Run a unit write, reporting gateway failures as a service error."""
+        try:
+            await write
+        except ConnectionError as ex:
+            raise HomeAssistantError(f"{self.name}: {ex}") from ex
+
     async def async_turn_on(self) -> None:
         """Turn on the unit."""
-        await self._unit.async_write_prepare()
+        await self._async_write(self._unit.async_write_prepare())
         self._unit.status.power = True
-        await self._unit.async_write_commit()
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
 
     async def async_turn_off(self) -> None:
         """Turn off the unit."""
-        await self._unit.async_write_prepare()
+        await self._async_write(self._unit.async_write_prepare())
         self._unit.status.power = False
-        await self._unit.async_write_commit()
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
 
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set the HVAC mode."""
-        await self._unit.async_write_prepare()
-        if hvac_mode is HVACMode.OFF:
+    def _apply_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set power and operating mode on the unit status for an HVAC mode."""
+        if hvac_mode == HVACMode.OFF:
             self._unit.status.power = False
         else:
             self._unit.status.power = True
             self._unit.status.operating_mode = MODE_HA_DAIKIN[hvac_mode]
-        await self._unit.async_write_commit()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set the HVAC mode."""
+        await self._async_write(self._unit.async_write_prepare())
+        self._apply_hvac_mode(hvac_mode)
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs) -> None:
-        """Set new target temperature."""
-        await self._unit.async_write_prepare()
-        self._unit.status.temp_setpoint = kwargs["temperature"]
-        await self._unit.async_write_commit()
+        """Set new target temperature, and the HVAC mode if one is given."""
+        await self._async_write(self._unit.async_write_prepare())
+        # climate.set_temperature passes hvac_mode through for the entity to apply
+        if (hvac_mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            self._apply_hvac_mode(hvac_mode)
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            self._unit.status.temp_setpoint = temperature
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new fan mode."""
-        await self._unit.async_write_prepare()
+        await self._async_write(self._unit.async_write_prepare())
         self._unit.status.fan_speed = FANSPEED_HA_DAIKIN[fan_mode]
-        await self._unit.async_write_commit()
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
 
     async def async_set_swing_mode(self, swing_mode) -> None:
         """Set new swing mode."""
-        await self._unit.async_write_prepare()
+        await self._async_write(self._unit.async_write_prepare())
         self._unit.status.fan_direct = SWINGMODE_HA_DAIKIN[swing_mode]
-        await self._unit.async_write_commit()
+        await self._async_write(self._unit.async_write_commit())
         self.async_write_ha_state()
